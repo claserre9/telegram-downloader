@@ -1,8 +1,8 @@
 
-# Telegram Video Downloader
+# Telegram Downloader
 
 ## Introduction
-This project is a Telegram Video Downloader tool, designed to help users download videos from Telegram channels efficiently. 
+This project is a Telegram Downloader tool, designed to help users download any medias (videos, photos and documents) from Telegram channels efficiently. 
 It is particularly useful for channels that do not provide direct access to download media. The tool supports both public and private channels, provided that the user has appropriate access permissions.
 
 ## Key Benefit
@@ -20,7 +20,7 @@ Before you begin, ensure you have met the following requirements:
 - You have access to the Telegram channel(s) from which you wish to download videos.
 
 ## Installation
-To install Telegram Video Downloader, follow these steps:
+To install Telegram Downloader, follow these steps:
 
 1. Clone the repository:
    ```
@@ -36,22 +36,18 @@ To install Telegram Video Downloader, follow these steps:
    ```
 
 ## Usage
-To use Telegram Video Downloader, follow these steps:
+To use Telegram Downloader, follow these steps:
 
 1. Configure your Telegram API credentials in a `.env` file. Create it in the root project and add the necessary 
    environment variables (Check the .env.dev as an example).
 2. Run the following script:
    ```
-   php src/downloadAllVideosAndPhotos.php
-   ```
-   or 
-   ```
-   php src/downloadLastVideo.php
+   php src/download.php
    ```
 3. Follow the prompts to log in to Telegram.
 
-## Contributing to Telegram Video Downloader
-To contribute to Telegram Video Downloader, follow these steps:
+## Contributing to Telegram Downloader
+To contribute to Telegram Downloader, follow these steps:
 
 1. Fork this repository.
 2. Create a branch: `git checkout -b <branch_name>`.
