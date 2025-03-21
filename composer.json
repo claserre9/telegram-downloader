@@ -5,10 +5,21 @@
         "symfony/filesystem": "^7.2",
         "symfony/console": "^7.2"
     },
+    "config": {
+        "preferred-install": "source",
+        "archive-format": "zip"
+    },
     "autoload": {
         "psr-4": {
             "claserre9\\" : "src"
         }
     },
-    "minimum-stability": "beta"
+    "minimum-stability": "beta",
+    "require-dev": {
+        "roave/security-advisories": "dev-latest",
+        "phpstan/phpstan": "^2.1"
+    },
+    "scripts": {
+        "stan" : "php vendor/bin/phpstan analyse src --level 7 --memory-limit=-1"
+    }
 }
