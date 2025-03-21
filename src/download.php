@@ -26,7 +26,7 @@ try {
     $limit = 100;
     $lastMessageId = 0;
 
-    $settings = (new AppInfo)
+    $settings = (new AppInfo())
         ->setApiId($_ENV['TELEGRAM_API_ID'])
         ->setApiHash($_ENV['TELEGRAM_API_HASH']);
 
