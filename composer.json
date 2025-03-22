@@ -1,5 +1,17 @@
 {
+    "name": "claserre9/telegram-downloader",
+    "type": "project",
+    "description": "Telegram Downloader is a tool designed to simplify the process of downloading media from Telegram channels",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Clifford Laserre",
+            "email": "claserre9@gmail.com",
+            "homepage": "https://claserre9.github.io"
+        }
+    ],
     "require": {
+        "php" : ">=8.2",
         "vlucas/phpdotenv": "^5.6",
         "danog/madelineproto": "^8",
         "symfony/filesystem": "^7.2",
