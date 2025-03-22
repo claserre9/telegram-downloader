@@ -15,10 +15,11 @@ $dotenv = Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->safeLoad();
 
 
-$application = new Application();
+$application = new Application('Telegram Downloader', '1.0.0');
 $application->add(new DownloadMediaCommand());
 try {
     $application->run();
 } catch (Exception $e) {
-
+    echo $e->getMessage(). PHP_EOL;
+    exit(1);
 }
