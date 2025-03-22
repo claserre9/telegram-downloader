@@ -41,10 +41,15 @@ To use Telegram Downloader, follow these steps:
 
 1. Configure your Telegram API credentials in a `.env` file. Create it in the root project and add the necessary 
    environment variables (Check the .env.dev as an example).
-2. Run the following script:
+2. Run the following command:
    ```
-   php src/download.php
+   php bin/console telegram:download:media
    ```
+   or 
+
+   ```
+   php bin/console tdm
+   ````
 3. Follow the prompts to log in to Telegram.
 
 ## Contributing to Telegram Downloader
