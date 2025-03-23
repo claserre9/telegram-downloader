@@ -11,6 +11,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Filesystem\Filesystem;
 
+/**
+ * Configures the command's name, description, and help details.
+ *
+ * @return void
+ */
 #[AsCommand(
     name: 'telegram:download:media',
     description: 'Download media from telegram',
@@ -19,6 +24,11 @@ use Symfony\Component\Filesystem\Filesystem;
 class DownloadMediaCommand extends Command
 {
 
+    /**
+     * Configures the command's description and help message.
+     *
+     * @return void
+     */
     protected function configure(): void
     {
         $this->setDescription('Download media from telegram')
@@ -26,6 +36,17 @@ class DownloadMediaCommand extends Command
         ;
     }
 
+    /**
+     * Executes the command to download media messages from a Telegram channel.
+     *
+     * This method connects to a Telegram channel using credentials from environment
+     * variables, retrieves messages in batches, and downloads media files such as
+     * photos and documents to a local directory.
+     *
+     * @param InputInterface $input The input interface for retrieving command arguments and options.
+     * @param OutputInterface $output The output interface for displaying messages to the user.
+     * @return int Returns Command::SUCCESS on successful execution, or Command::FAILURE on error.
+     */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);

@@ -23,6 +23,11 @@ class TelegramClient
     private ?API $madeline = null;
     private ?Settings $settings = null;
 
+    /**
+     * @param int $telegramApiId
+     * @param string $telegramApiHash
+     * @param string|null $sessionPath
+     */
     public function __construct(int $telegramApiId, string $telegramApiHash, ?string $sessionPath = 'session.madeline')
     {
         if (empty($telegramApiId) || empty($telegramApiHash)) {
