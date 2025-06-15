@@ -52,6 +52,26 @@ To use Telegram Downloader, follow these steps:
    ````
 3. Follow the prompts to log in to Telegram.
 
+## Web Interface
+The project also includes a lightweight web front-end powered by MadelineProto.
+Start a PHP development server in the `public/` directory:
+
+```bash
+php -S localhost:8000 -t public
+```
+
+Navigate to `http://localhost:8000` in your browser. Use the login form to
+authenticate with your phone number and code. After logging in you can browse
+media from any chat, filter by type, and download individual files.
+
+### Example MadelineProto Usage
+```php
+$client = new WebTelegramClient($apiId, $apiHash, 'sessions/web.session');
+$client->requestCode($phone);        // messages.sendCode
+$client->completeCode($code);        // auth.signIn
+$messages = $client->getMedia($chat); // messages.getHistory
+```
+
 ## Contributing to Telegram Downloader
 To contribute to Telegram Downloader, follow these steps:
 
