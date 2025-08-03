@@ -3,4 +3,6 @@
 .env
 /session.madeline/
 /downloads/
+/sessions/
+!/sessions/.gitkeep
 /*.log
