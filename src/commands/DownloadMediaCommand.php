@@ -46,6 +46,7 @@ class DownloadMediaCommand extends Command
      * @param InputInterface $input The input interface for retrieving command arguments and options.
      * @param OutputInterface $output The output interface for displaying messages to the user.
      * @return int Returns Command::SUCCESS on successful execution, or Command::FAILURE on error.
+     * @throws RuntimeException If required environment variables are missing.
      */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {

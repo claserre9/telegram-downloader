@@ -197,12 +197,13 @@ $app->get('/media', function (Request $request, Response $response) use ($client
 
     if ($chat !== '') {
         try {
-            $messages = $clientFactory()->getMedia($chat, $type, $offsetId, 20);
-            $messages = filterMedia($messages, $type);
+            $client = $clientFactory();
+            $messages = $client->getMedia($chat, $type, $offsetId, 20);
+            $messages = $client->filterMedia($messages, $type);
             usort($messages, static fn(array $a, array $b) => ($b['id'] ?? 0) <=> ($a['id'] ?? 0));
             if (!empty($messages)) {
                 $ids = array_map(static fn(array $m) => $m['id'] ?? 0, $messages);
-                $minId = min($ids);
+                $minId = (int) min($ids);
                 $nextOffset = $minId > 1 ? $minId - 1 : 0;
             }
         } catch (Throwable $e) {
@@ -225,6 +226,7 @@ $app->get('/media', function (Request $request, Response $response) use ($client
             $body .= '<p class="muted">No media found.</p>';
         } else {
             $body .= '<table class="media-table"><tr><th>ID</th><th>Date</th><th>Type</th><th>Name</th><th>Size</th><th>Action</th></tr>';
+            $client = $clientFactory();
             foreach ($messages as $msg) {
                 $rawType = $msg['media']['_'] ?? '';
                 $typeDisplay = match($rawType) {
@@ -249,7 +251,7 @@ $app->get('/media', function (Request $request, Response $response) use ($client
                 $fileSize = 0;
                 if (isset($msg['media']['document'])) {
                     $doc = $msg['media']['document'];
-                    $fileSize = $doc['size'] ?? 0;
+                    $fileSize = (int)($doc['size'] ?? 0);
                     if (isset($doc['attributes'])) {
                         foreach ($doc['attributes'] as $attr) {
                             if ($attr['_'] === 'documentAttributeFilename') {
@@ -262,20 +264,11 @@ $app->get('/media', function (Request $request, Response $response) use ($client
                     $fileName = 'photo_' . $msg['id'] . '.jpg';
                     if (isset($msg['media']['photo']['sizes'])) {
                         $lastSize = end($msg['media']['photo']['sizes']);
-                        $fileSize = $lastSize['size'] ?? 0;
+                        $fileSize = (int)($lastSize['size'] ?? 0);
                     }
                 }
 
-                $formattedSize = 'N/A';
-                if ($fileSize > 0) {
-                    $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-                    $i = 0;
-                    while ($fileSize >= 1024 && $i < count($units) - 1) {
-                        $fileSize /= 1024;
-                        $i++;
-                    }
-                    $formattedSize = round($fileSize, 2) . ' ' . $units[$i];
-                }
+                $formattedSize = $client->formatSize($fileSize);
 
                 $body .= '<tr>';
                 $body .= '<td>' . (int) $msg['id'] . '</td>';
@@ -349,32 +342,5 @@ $app->get('/download', function (Request $request, Response $response) use ($cli
         return $response->withStatus(500);
     }
 });
-
-function filterMedia(array $messages, string $type): array
-{
-    if ($type === '') {
-        return $messages;
-    }
-
-    $filtered = [];
-    foreach ($messages as $message) {
-        if (!isset($message['media'])) {
-            continue;
-        }
-
-        $mediaType = $message['media']['_'] ?? '';
-        if ($type === 'photo' && $mediaType === 'messageMediaPhoto') {
-            $filtered[] = $message;
-        } elseif ($type === 'document' && $mediaType === 'messageMediaDocument') {
-            $filtered[] = $message;
-        } elseif ($type === 'video' && $mediaType === 'messageMediaDocument' && isset($message['media']['document']['mime_type']) && str_starts_with($message['media']['document']['mime_type'], 'video')) {
-            $filtered[] = $message;
-        } elseif ($type === 'audio' && $mediaType === 'messageMediaDocument' && isset($message['media']['document']['mime_type']) && str_starts_with($message['media']['document']['mime_type'], 'audio')) {
-            $filtered[] = $message;
-        }
-    }
-
-    return $filtered;
-}
 
 $app->run();

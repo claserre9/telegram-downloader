@@ -24,21 +24,25 @@ class TelegramClient
     private ?Settings $settings = null;
 
     /**
-     * @param int $telegramApiId
-     * @param string $telegramApiHash
-     * @param string|null $sessionPath
+     * @param int $telegramApiId The Telegram API ID.
+     * @param string $telegramApiHash The Telegram API Hash.
+     * @param string|null $sessionPath The path to the session file.
+     * @throws InvalidArgumentException If API credentials are empty.
      */
     public function __construct(int $telegramApiId, string $telegramApiHash, ?string $sessionPath = 'session.madeline')
     {
-        if (empty($telegramApiId) || empty($telegramApiHash)) {
-            throw new InvalidArgumentException('Invalid API credentials provided.');
+        if ($telegramApiId <= 0) {
+            throw new InvalidArgumentException('Invalid API ID provided.');
+        }
+        if (empty($telegramApiHash)) {
+            throw new InvalidArgumentException('Invalid API Hash provided.');
         }
 
         $this->telegramApiId = $telegramApiId;
         $this->telegramApiHash = $telegramApiHash;
 
         $this->setClientSettings();
-        $this->init($this->settings, $sessionPath);
+        $this->init($this->settings, $sessionPath ?? 'session.madeline');
     }
 
     /**
