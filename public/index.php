@@ -224,12 +224,65 @@ $app->get('/media', function (Request $request, Response $response) use ($client
         if (empty($messages)) {
             $body .= '<p class="muted">No media found.</p>';
         } else {
-            $body .= '<table class="media-table"><tr><th>ID</th><th>Type</th><th>Action</th></tr>';
+            $body .= '<table class="media-table"><tr><th>ID</th><th>Date</th><th>Type</th><th>Name</th><th>Size</th><th>Action</th></tr>';
             foreach ($messages as $msg) {
-                $mediaType = htmlspecialchars($msg['media']['_'] ?? '', ENT_QUOTES, 'UTF-8');
+                $rawType = $msg['media']['_'] ?? '';
+                $typeDisplay = match($rawType) {
+                    'messageMediaPhoto' => 'photo',
+                    'messageMediaDocument' => 'document',
+                    default => str_replace('messageMedia', '', $rawType)
+                };
+
+                // Better type detection for videos/audio (which are documents in Telegram)
+                if ($rawType === 'messageMediaDocument') {
+                    $mime = $msg['media']['document']['mime_type'] ?? '';
+                    if (str_starts_with($mime, 'video/')) {
+                        $typeDisplay = 'video';
+                    } elseif (str_starts_with($mime, 'audio/')) {
+                        $typeDisplay = 'audio';
+                    }
+                }
+
+                $date = date('Y-m-d H:i:s', $msg['date'] ?? 0);
+                
+                $fileName = 'N/A';
+                $fileSize = 0;
+                if (isset($msg['media']['document'])) {
+                    $doc = $msg['media']['document'];
+                    $fileSize = $doc['size'] ?? 0;
+                    if (isset($doc['attributes'])) {
+                        foreach ($doc['attributes'] as $attr) {
+                            if ($attr['_'] === 'documentAttributeFilename') {
+                                $fileName = $attr['file_name'];
+                                break;
+                            }
+                        }
+                    }
+                } elseif ($rawType === 'messageMediaPhoto') {
+                    $fileName = 'photo_' . $msg['id'] . '.jpg';
+                    if (isset($msg['media']['photo']['sizes'])) {
+                        $lastSize = end($msg['media']['photo']['sizes']);
+                        $fileSize = $lastSize['size'] ?? 0;
+                    }
+                }
+
+                $formattedSize = 'N/A';
+                if ($fileSize > 0) {
+                    $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                    $i = 0;
+                    while ($fileSize >= 1024 && $i < count($units) - 1) {
+                        $fileSize /= 1024;
+                        $i++;
+                    }
+                    $formattedSize = round($fileSize, 2) . ' ' . $units[$i];
+                }
+
                 $body .= '<tr>';
                 $body .= '<td>' . (int) $msg['id'] . '</td>';
-                $body .= '<td>' . $mediaType . '</td>';
+                $body .= '<td>' . htmlspecialchars($date, ENT_QUOTES, 'UTF-8') . '</td>';
+                $body .= '<td>' . htmlspecialchars($typeDisplay, ENT_QUOTES, 'UTF-8') . '</td>';
+                $body .= '<td>' . htmlspecialchars($fileName, ENT_QUOTES, 'UTF-8') . '</td>';
+                $body .= '<td>' . htmlspecialchars($formattedSize, ENT_QUOTES, 'UTF-8') . '</td>';
                 $body .= '<td><a href="/download?chat=' . urlencode($chat) . '&id=' . (int) $msg['id'] . '">Download</a></td>';
                 $body .= '</tr>';
             }
