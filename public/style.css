@@ -1,2 +1,112 @@
-body { font-family: Arial, sans-serif; margin: 2em; }
-label { display: block; margin-bottom: 1em; }
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    margin: 0;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+}
+
+header {
+    background: linear-gradient(135deg, #1d4ed8, #38bdf8);
+    color: #0b1021;
+    padding: 18px 32px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+
+header h1 {
+    margin: 0;
+    font-size: 24px;
+    letter-spacing: 0.02em;
+}
+
+main {
+    max-width: 860px;
+    margin: 40px auto;
+    padding: 0 24px 48px;
+}
+
+.card {
+    background: #0b1021;
+    border: 1px solid #1f2937;
+    border-radius: 16px;
+    padding: 24px 28px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+}
+
+.stacked-form {
+    display: grid;
+    gap: 14px;
+    margin-top: 12px;
+}
+
+label {
+    display: grid;
+    gap: 6px;
+    font-weight: 600;
+    color: #cbd5e1;
+}
+
+input, select {
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: #e2e8f0;
+    font-size: 15px;
+}
+
+button {
+    background: linear-gradient(135deg, #2563eb, #38bdf8);
+    color: #0b1021;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.08s ease, box-shadow 0.1s ease;
+    box-shadow: 0 10px 25px rgba(56,189,248,0.25);
+}
+
+button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 32px rgba(56,189,248,0.35);
+}
+
+.muted {
+    color: #94a3b8;
+}
+
+.error {
+    color: #fca5a5;
+    background: rgba(248,113,113,0.08);
+    border: 1px solid rgba(248,113,113,0.25);
+    padding: 10px 12px;
+    border-radius: 10px;
+}
+
+.media-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+}
+
+.media-table th,
+.media-table td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid #1f2937;
+}
+
+.media-table tr:hover {
+    background: rgba(56,189,248,0.06);
+}
+
+a {
+    color: #7dd3fc;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+a:hover {
+    text-decoration: underline;
+}

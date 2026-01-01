@@ -7,3 +7,4 @@
 !/sessions/.gitkeep
 /*.log
 /public/MadelineProto.log
+.aider*
