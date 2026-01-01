@@ -102,9 +102,12 @@ class DownloadMediaCommand extends Command
 
                     if (in_array($mediaType, ['messageMediaPhoto', 'messageMediaDocument'])) {
                         try {
-                            $file = $MadelineProto->downloadToDir($message['media'], $downloadPath);
+                            // Use the WebTelegramClient's downloadMedia method for proper handling
+                            $file = $MadelineProto->downloadToDir($message, $downloadPath);
                             $io->success("Downloaded: $file");
                         } catch (RuntimeException $e) {
+                            $io->error("Download error: {$e->getMessage()}");
+                        } catch (\Throwable $e) {
                             $io->error("Download error: {$e->getMessage()}");
                         }
                     }

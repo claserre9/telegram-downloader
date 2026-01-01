@@ -126,7 +126,10 @@ class WebTelegramClient extends TelegramClient
             throw new RuntimeException('Madeline not initialized');
         }
         $this->ensureStarted();
+        
         $chatInfo = $madeline->getPwrChat($chat);
+        $message = null;
+        
         if (isset($chatInfo['type']) && ($chatInfo['type'] === 'channel' || $chatInfo['type'] === 'supergroup')) {
             $res = $madeline->channels->getMessages([
                 'channel' => $chat,
@@ -138,17 +141,37 @@ class WebTelegramClient extends TelegramClient
             ]);
         }
 
-        foreach ($res['messages'] ?? [] as $message) {
-            // Skip empty/system messages.
-            if (($message['_'] ?? '') === 'messageEmpty' || !isset($message['media'])) {
-                continue;
+        foreach ($res['messages'] ?? [] as $msg) {
+            if (($msg['_'] ?? '') !== 'messageEmpty' && isset($msg['media'])) {
+                $message = $msg;
+                break;
             }
-
-            $madeline->downloadToBrowser($message);
-            return;
         }
 
-        throw new RuntimeException('Message has no media payload');
+        if (!$message) {
+            throw new RuntimeException('Message has no media payload');
+        }
+
+        $mime = null;
+        $name = null;
+        $size = null;
+
+        if (isset($message['media']['document'])) {
+            $doc = $message['media']['document'];
+            $mime = $doc['mime_type'] ?? null;
+            $size = $doc['size'] ?? null;
+            foreach ($doc['attributes'] ?? [] as $attr) {
+                if ($attr['_'] === 'documentAttributeFilename') {
+                    $name = $attr['file_name'];
+                    break;
+                }
+            }
+        } elseif (isset($message['media']['photo'])) {
+            $mime = 'image/jpeg'; // Photos are usually JPEGs in Telegram
+            $name = 'photo_' . $message['id'] . '.jpg';
+        }
+
+        $madeline->downloadToBrowser($message, null, $size, $name, $mime);
     }
 
     /**
@@ -161,7 +184,10 @@ class WebTelegramClient extends TelegramClient
             throw new RuntimeException('Madeline not initialized');
         }
         $this->ensureStarted();
+        
         $chatInfo = $madeline->getPwrChat($chat);
+        $message = null;
+        
         if (isset($chatInfo['type']) && ($chatInfo['type'] === 'channel' || $chatInfo['type'] === 'supergroup')) {
             $res = $madeline->channels->getMessages([
                 'channel' => $chat,
@@ -173,29 +199,34 @@ class WebTelegramClient extends TelegramClient
             ]);
         }
 
-        foreach ($res['messages'] ?? [] as $message) {
-            if (($message['_'] ?? '') === 'messageEmpty' || !isset($message['media'])) {
-                continue;
+        foreach ($res['messages'] ?? [] as $msg) {
+            if (($msg['_'] ?? '') !== 'messageEmpty' && isset($msg['media'])) {
+                $message = $msg;
+                break;
             }
-
-            return $madeline->getDownloadLink($message, $scriptUrl);
         }
 
-        throw new RuntimeException('Message has no media payload');
+        if (!$message) {
+            throw new RuntimeException('Message has no media payload');
+        }
+
+        return $madeline->getDownloadLink($message, $scriptUrl);
     }
 
     /**
      * Download the media of a specific message to a temporary file.
      */
-    public function downloadMedia(string $chat, int $messageId): string
+    public function downloadMedia(string $chat, int $messageId, ?string $downloadDir = null): string
     {
         $madeline = $this->getMadeline();
         if (!$madeline) {
             throw new RuntimeException('Madeline not initialized');
         }
         $this->ensureStarted();
+        
         $chatInfo = $madeline->getPwrChat($chat);
-
+        $message = null;
+        
         if (isset($chatInfo['type']) && ($chatInfo['type'] === 'channel' || $chatInfo['type'] === 'supergroup')) {
             $res = $madeline->channels->getMessages([
                 'channel' => $chat,
@@ -207,19 +238,25 @@ class WebTelegramClient extends TelegramClient
             ]);
         }
 
-        foreach ($res['messages'] ?? [] as $message) {
-            // Skip empty/system messages.
-            if (($message['_'] ?? '') === 'messageEmpty' || !isset($message['media'])) {
-                continue;
-            }
-
-            try {
-                return $madeline->downloadToDir($message, sys_get_temp_dir());
-            } catch (Throwable) {
-                continue;
+        foreach ($res['messages'] ?? [] as $msg) {
+            if (($msg['_'] ?? '') !== 'messageEmpty' && isset($msg['media'])) {
+                $message = $msg;
+                break;
             }
         }
 
-        throw new RuntimeException('Message has no media payload');
+        if (!$message) {
+            throw new RuntimeException('Message has no media payload');
+        }
+
+        if ($downloadDir === null) {
+            $downloadDir = sys_get_temp_dir();
+        }
+
+        try {
+            return $madeline->downloadToDir($message, $downloadDir);
+        } catch (Throwable $e) {
+            throw new RuntimeException('Download failed: ' . $e->getMessage());
+        }
     }
 }

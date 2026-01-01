@@ -261,9 +261,36 @@ $app->get('/download', function (Request $request, Response $response) use ($cli
     }
 
     try {
-        $scriptUrl = (string) $request->getUri()->withPath('/dl.php')->withQuery('');
-        $link = $clientFactory()->getDownloadLink($chat, $id, $scriptUrl);
-        return $redirect($response, $link);
+        $downloadDir = __DIR__ . '/../downloads';
+        if (!is_dir($downloadDir)) {
+            mkdir($downloadDir, 0775, true);
+        }
+
+        $file = $clientFactory()->downloadMedia($chat, $id, $downloadDir);
+        if (!is_file($file)) {
+            throw new RuntimeException('Download failed');
+        }
+
+        $size = filesize($file);
+        if ($size === 0) {
+            throw new RuntimeException('Downloaded file is empty');
+        }
+
+        $mimeType = mime_content_type($file) ?: 'application/octet-stream';
+        $name = basename($file);
+        
+        // Clean any previous output to avoid corruption
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        $stream = new \claserre9\UnlinkStream(fopen($file, 'rb'), $file);
+
+        return $response
+            ->withHeader('Content-Type', $mimeType)
+            ->withHeader('Content-Length', (string)$size)
+            ->withHeader('Content-Disposition', 'attachment; filename="' . str_replace('"', '\"', $name) . '"; filename*=UTF-8\'\'' . rawurlencode($name))
+            ->withBody($stream);
     } catch (Throwable $e) {
         $response->getBody()->write('Download error: ' . $e->getMessage());
         return $response->withStatus(500);
