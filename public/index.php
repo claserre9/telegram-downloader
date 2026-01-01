@@ -1,34 +1,300 @@
 <?php
-require __DIR__ . '/bootstrap.php';
 
-if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {
-    header('Location: login.php');
-    exit;
+declare(strict_types=1);
+
+use Dotenv\Dotenv;
+use Psr\Http\Message\ResponseInterface as Response;
+use Psr\Http\Message\ServerRequestInterface as Request;
+use Slim\Factory\AppFactory;
+use claserre9\WebTelegramClient;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+if (PHP_SAPI === 'cli-server') {
+    $url = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    $file = __DIR__ . $url;
+    if (is_file($file)) {
+        return false;
+    }
 }
 
-?>
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
+$dotenv = Dotenv::createImmutable(__DIR__ . '/..');
+$dotenv->safeLoad();
+
+$app = AppFactory::create();
+$app->addRoutingMiddleware();
+$app->addBodyParsingMiddleware();
+$app->addErrorMiddleware(true, true, true);
+
+$clientFactory = static function (): WebTelegramClient {
+    $sessionsDir = __DIR__ . '/../sessions';
+    $sessionPath = $sessionsDir . '/web.session';
+    static $client = null;
+
+    if ($client === null) {
+        if (!is_dir($sessionsDir)) {
+            mkdir($sessionsDir, 0775, true);
+        }
+        if (!isset($_ENV['TELEGRAM_API_ID'], $_ENV['TELEGRAM_API_HASH'])) {
+            throw new RuntimeException('TELEGRAM_API_ID and TELEGRAM_API_HASH must be set');
+        }
+        $client = new WebTelegramClient(
+            (int) $_ENV['TELEGRAM_API_ID'],
+            (string) $_ENV['TELEGRAM_API_HASH'],
+            $sessionPath
+        );
+    }
+
+    return $client;
+};
+
+$renderLayout = static function (string $title, string $content): string {
+    return <<<HTML
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Telegram Downloader</title>
-    <link rel="stylesheet" href="style.css">
+    <title>{$title}</title>
+    <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<h1>Telegram Media Downloader</h1>
-<form method="get" action="media.php">
-    <label>Chat, channel or group: <input type="text" name="chat" required></label>
-    <label>Type:
-        <select name="type">
-            <option value="">All</option>
-            <option value="photo">Photos</option>
-            <option value="video">Videos</option>
-            <option value="document">Documents</option>
-            <option value="audio">Audio</option>
-        </select>
-    </label>
-    <button type="submit">Browse</button>
-</form>
-<p><a href="logout.php">Logout</a></p>
+<header><h1>{$title}</h1></header>
+<main>{$content}</main>
 </body>
 </html>
+HTML;
+};
+
+$redirect = static function (Response $response, string $path): Response {
+    return $response->withHeader('Location', $path)->withStatus(302);
+};
+
+$isLoggedIn = static function (): bool {
+    return isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true;
+};
+
+$renderHome = static function (Response $response) use ($renderLayout): Response {
+    $content = <<<HTML
+<section class="card">
+    <p class="muted">Browse media from any chat, channel or group.</p>
+    <form method="get" action="/media" class="stacked-form">
+        <label>Chat, channel or group
+            <input type="text" name="chat" required placeholder="@channel or chat id">
+        </label>
+        <label>Type
+            <select name="type">
+                <option value="">All</option>
+                <option value="photo">Photos</option>
+                <option value="video">Videos</option>
+                <option value="document">Documents</option>
+                <option value="audio">Audio</option>
+            </select>
+        </label>
+        <button type="submit">Browse</button>
+    </form>
+    <p class="muted"><a href="/logout">Logout</a></p>
+</section>
+HTML;
+
+    $response->getBody()->write($renderLayout('Telegram Media Downloader', $content));
+    return $response;
+};
+
+$app->get('/', function (Request $request, Response $response) use ($isLoggedIn, $redirect, $renderHome) {
+    if (!$isLoggedIn()) {
+        return $redirect($response, '/login');
+    }
+
+    return $renderHome($response);
+});
+
+$app->map(['GET', 'POST'], '/login', function (Request $request, Response $response) use ($clientFactory, $renderLayout, $redirect) {
+    $step = $_SESSION['step'] ?? 'phone';
+    $message = '';
+
+    if ($request->getMethod() === 'POST') {
+        $data = (array) $request->getParsedBody();
+
+        if ($step === 'phone' && isset($data['phone'])) {
+            try {
+                $clientFactory()->requestCode($data['phone']);
+                $_SESSION['phone'] = $data['phone'];
+                $_SESSION['step'] = 'code';
+                return $redirect($response, '/login');
+            } catch (Throwable $e) {
+                $message = 'Error requesting code: ' . $e->getMessage();
+            }
+        } elseif ($step === 'code' && isset($data['code'])) {
+            try {
+                $clientFactory()->completeCode($data['code'], $data['password'] ?? null);
+                $_SESSION['logged_in'] = true;
+                $_SESSION['step'] = 'phone';
+                return $redirect($response, '/');
+            } catch (Throwable $e) {
+                $message = 'Login error: ' . $e->getMessage();
+            }
+        }
+    }
+
+    $body = '<section class="card">';
+    if ($message !== '') {
+        $body .= '<p class="error">' . htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . '</p>';
+    }
+
+    if ($step === 'phone') {
+        $body .= <<<HTML
+    <form method="post" class="stacked-form">
+        <label>Phone number
+            <input type="text" name="phone" required placeholder="+123456789">
+        </label>
+        <button type="submit">Send code</button>
+    </form>
+HTML;
+    } else {
+        $body .= <<<HTML
+    <form method="post" class="stacked-form">
+        <label>Code
+            <input type="text" name="code" required>
+        </label>
+        <label>Password (if 2FA enabled)
+            <input type="password" name="password">
+        </label>
+        <button type="submit">Login</button>
+    </form>
+HTML;
+    }
+
+    $body .= '</section>';
+
+    $response->getBody()->write($renderLayout('Login to Telegram', $body));
+    return $response;
+});
+
+$app->get('/logout', function (Request $request, Response $response) use ($redirect) {
+    $_SESSION = [];
+    session_destroy();
+
+    return $redirect($response, '/login');
+});
+
+$app->get('/media', function (Request $request, Response $response) use ($clientFactory, $renderLayout, $redirect, $isLoggedIn) {
+    if (!$isLoggedIn()) {
+        return $redirect($response, '/login');
+    }
+
+    $params = $request->getQueryParams();
+    $chat = $params['chat'] ?? '';
+    $type = $params['type'] ?? '';
+    $offsetId = isset($params['offset']) ? (int) $params['offset'] : 0;
+
+    $messages = [];
+    $nextOffset = 0;
+    $error = '';
+
+    if ($chat !== '') {
+        try {
+            $messages = $clientFactory()->getMedia($chat, $type, $offsetId, 20);
+            $messages = filterMedia($messages, $type);
+            usort($messages, static fn(array $a, array $b) => ($b['id'] ?? 0) <=> ($a['id'] ?? 0));
+            if (!empty($messages)) {
+                $ids = array_map(static fn(array $m) => $m['id'] ?? 0, $messages);
+                $minId = min($ids);
+                $nextOffset = $minId > 1 ? $minId - 1 : 0;
+            }
+        } catch (Throwable $e) {
+            $error = 'Error fetching media: ' . $e->getMessage();
+        }
+    }
+
+    $body = '<section class="card">';
+    $body .= '<p class="muted"><a href="/">Back</a></p>';
+
+    if ($error !== '') {
+        $body .= '<p class="error">' . htmlspecialchars($error, ENT_QUOTES, 'UTF-8') . '</p>';
+    }
+
+    if ($chat === '') {
+        $body .= '<p class="muted">No chat selected.</p>';
+    } else {
+        $body .= '<h2>Media in ' . htmlspecialchars($chat, ENT_QUOTES, 'UTF-8') . '</h2>';
+        if (empty($messages)) {
+            $body .= '<p class="muted">No media found.</p>';
+        } else {
+            $body .= '<table class="media-table"><tr><th>ID</th><th>Type</th><th>Action</th></tr>';
+            foreach ($messages as $msg) {
+                $mediaType = htmlspecialchars($msg['media']['_'] ?? '', ENT_QUOTES, 'UTF-8');
+                $body .= '<tr>';
+                $body .= '<td>' . (int) $msg['id'] . '</td>';
+                $body .= '<td>' . $mediaType . '</td>';
+                $body .= '<td><a href="/download?chat=' . urlencode($chat) . '&id=' . (int) $msg['id'] . '">Download</a></td>';
+                $body .= '</tr>';
+            }
+            $body .= '</table>';
+            if ($nextOffset) {
+                $body .= '<p><a href="/media?chat=' . urlencode($chat) . '&type=' . urlencode($type) . '&offset=' . $nextOffset . '">Older messages</a></p>';
+            }
+        }
+    }
+
+    $body .= '</section>';
+
+    $response->getBody()->write($renderLayout('Media', $body));
+    return $response;
+});
+
+$app->get('/download', function (Request $request, Response $response) use ($clientFactory, $redirect, $isLoggedIn) {
+    if (!$isLoggedIn()) {
+        return $redirect($response, '/login');
+    }
+
+    $params = $request->getQueryParams();
+    $chat = $params['chat'] ?? null;
+    $id = isset($params['id']) ? (int) $params['id'] : 0;
+
+    if (!$chat || !$id) {
+        $response->getBody()->write('Invalid request');
+        return $response->withStatus(400);
+    }
+
+    try {
+        $scriptUrl = (string) $request->getUri()->withPath('/dl.php')->withQuery('');
+        $link = $clientFactory()->getDownloadLink($chat, $id, $scriptUrl);
+        return $redirect($response, $link);
+    } catch (Throwable $e) {
+        $response->getBody()->write('Download error: ' . $e->getMessage());
+        return $response->withStatus(500);
+    }
+});
+
+function filterMedia(array $messages, string $type): array
+{
+    if ($type === '') {
+        return $messages;
+    }
+
+    $filtered = [];
+    foreach ($messages as $message) {
+        if (!isset($message['media'])) {
+            continue;
+        }
+
+        $mediaType = $message['media']['_'] ?? '';
+        if ($type === 'photo' && $mediaType === 'messageMediaPhoto') {
+            $filtered[] = $message;
+        } elseif ($type === 'document' && $mediaType === 'messageMediaDocument') {
+            $filtered[] = $message;
+        } elseif ($type === 'video' && $mediaType === 'messageMediaDocument' && isset($message['media']['document']['mime_type']) && str_starts_with($message['media']['document']['mime_type'], 'video')) {
+            $filtered[] = $message;
+        } elseif ($type === 'audio' && $mediaType === 'messageMediaDocument' && isset($message['media']['document']['mime_type']) && str_starts_with($message['media']['document']['mime_type'], 'audio')) {
+            $filtered[] = $message;
+        }
+    }
+
+    return $filtered;
+}
+
+$app->run();

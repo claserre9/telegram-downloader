@@ -52,17 +52,16 @@ To use Telegram Downloader, follow these steps:
    ````
 3. Follow the prompts to log in to Telegram.
 
-## Web Interface
-The project also includes a lightweight web front-end powered by MadelineProto.
-Start a PHP development server in the `public/` directory:
+## Web Interface (Slim v4)
+The lightweight web UI now runs on [Slim v4](https://www.slimframework.com/).
+Run the built-in server with the Slim front controller:
 
 ```bash
-php -S localhost:8000 -t public
+php -S localhost:8000 -t public public/index.php
 ```
 
-Navigate to `http://localhost:8000` in your browser. Use the login form to
-authenticate with your phone number and code. After logging in you can browse
-media from any chat, filter by type, and download individual files.
+Visit `http://localhost:8000`. Use the two-step login form (phone → code/2FA),
+then browse media by chat/channel, filter by type, paginate, and download files.
 
 ### Example MadelineProto Usage
 ```php
