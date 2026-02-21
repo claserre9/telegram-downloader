@@ -52,6 +52,12 @@ To use Telegram Downloader, follow these steps:
    ````
 3. Follow the prompts to log in to Telegram.
 
+#### Note
+
+You can pass credentials directly with `TELEGRAM_CHANNEL=channel TELEGRAM_API_HASH=key php bin/console telegram:download:media`
+
+If you set `variables_order = "EGPCS"` in `/etc/php/php.ini` (`E` is required for ENV).
+
 ## Web Interface (Slim v4)
 The lightweight web UI now runs on [Slim v4](https://www.slimframework.com/).
 Run the built-in server with the Slim front controller:
