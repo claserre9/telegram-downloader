@@ -152,6 +152,42 @@ class WebTelegramClient extends TelegramClient
     }
 
     /**
+     * Retrieve all conversations from the main and archived Telegram folders.
+     *
+     * @return list<array{id: int|string, name: string, type: string, username: string}>
+     * @throws RuntimeException If Madeline is not initialized or pagination cannot advance.
+     * @throws Throwable If fetching dialogs fails.
+     */
+    public function getConversations(): array
+    {
+        $madeline = $this->getMadeline();
+        if (!$madeline) {
+            throw new RuntimeException('Madeline not initialized');
+        }
+        $this->ensureStarted();
+
+        return DialogDirectory::fetchAll(
+            static function (int $folderId, int $offsetDate, int $offsetId, int|array|string $offsetPeer, int $limit) use ($madeline): array {
+                /** @var array<string, mixed> $result */
+                $result = $madeline->messages->getDialogs(
+                    exclude_pinned: $offsetId !== 0,
+                    folder_id: $folderId,
+                    offset_date: $offsetDate,
+                    offset_id: $offsetId,
+                    offset_peer: $offsetPeer,
+                    limit: $limit,
+                    hash: []
+                );
+
+                return $result;
+            },
+            static fn(mixed $peer): array => $madeline->getInfo($peer),
+            100,
+            static fn(array $message): int => $madeline->getInfo($message, \danog\MadelineProto\API::INFO_TYPE_ID)
+        );
+    }
+
+    /**
      * Map UI media type to Telegram search filter.
      *
      * @param string $type The media type string.
@@ -256,7 +292,6 @@ class WebTelegramClient extends TelegramClient
         
         if (isset($chatInfo['type']) && ($chatInfo['type'] === 'channel' || $chatInfo['type'] === 'supergroup')) {
             /** @var array{messages: array<int, array<string, mixed>>} $res */
-            /** @phpstan-ignore-next-line */
             $res = $madeline->channels->getMessages([
                 'channel' => $chat,
                 'id' => [$messageId],
@@ -280,13 +315,11 @@ class WebTelegramClient extends TelegramClient
             throw new RuntimeException('Message has no media payload');
         }
 
-        $mime = null;
         $name = null;
         $size = null;
 
         if (isset($message['media']['document'])) {
             $doc = $message['media']['document'];
-            $mime = $doc['mime_type'] ?? null;
             $size = $doc['size'] ?? null;
             foreach ($doc['attributes'] ?? [] as $attr) {
                 if ($attr['_'] === 'documentAttributeFilename') {
@@ -295,11 +328,11 @@ class WebTelegramClient extends TelegramClient
                 }
             }
         } elseif (isset($message['media']['photo'])) {
-            $mime = 'image/jpeg'; // Photos are usually JPEGs in Telegram
             $name = 'photo_' . $message['id'] . '.jpg';
         }
 
-        $madeline->downloadToBrowser($message, null, $size, $name, $mime);
+        // An octet-stream MIME type makes MadelineProto use Content-Disposition: attachment.
+        $madeline->downloadToBrowser($message, null, $size, $name, 'application/octet-stream');
     }
 
     /**
@@ -325,7 +358,6 @@ class WebTelegramClient extends TelegramClient
         
         if (isset($chatInfo['type']) && ($chatInfo['type'] === 'channel' || $chatInfo['type'] === 'supergroup')) {
             /** @var array{messages: array<int, array<string, mixed>>} $res */
-            /** @phpstan-ignore-next-line */
             $res = $madeline->channels->getMessages([
                 'channel' => $chat,
                 'id' => [$messageId],
@@ -383,7 +415,6 @@ class WebTelegramClient extends TelegramClient
         
         if (isset($chatInfo['type']) && ($chatInfo['type'] === 'channel' || $chatInfo['type'] === 'supergroup')) {
             /** @var array{messages: array<int, array<string, mixed>>} $res */
-            /** @phpstan-ignore-next-line */
             $res = $madeline->channels->getMessages([
                 'channel' => $chat,
                 'id' => [$messageId],

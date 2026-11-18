@@ -30,7 +30,6 @@
     },
     "minimum-stability": "beta",
     "require-dev": {
-        "roave/security-advisories": "dev-latest",
         "phpstan/phpstan": "^2.1"
     },
     "scripts": {

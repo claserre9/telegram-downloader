@@ -67,7 +67,22 @@ php -S localhost:8000 -t public public/index.php
 ```
 
 Visit `http://localhost:8000`. Use the two-step login form (phone → code/2FA),
-then browse media by chat/channel, filter by type, paginate, and download files.
+then search and paginate through conversations, groups and channels from the account. The
+conversation list includes archived chats, is cached in the web session while navigating,
+and can be refreshed explicitly; the first load may take longer for accounts with many chats.
+Each new browser session uses its own MadelineProto session file in `sessions/`, so a restart
+or a previously authorized session will not block a fresh code request. Keep the PHP browser
+session cookie to continue the same login; if it is lost, request a new Telegram code. Existing
+PHP sessions that were already logged in before this change continue to use `sessions/web.session`.
+Logging out clears only this web session and does not revoke Telegram authorization; revoke an
+authorization from Telegram's **Settings → Devices** when needed. Treat all files in `sessions/`
+as secrets and do not share or expose them.
+Use the manual chat field if a conversation is not listed. Then browse media by chat/channel,
+filter by type, paginate, and download files. Downloads
+are streamed from Telegram to the browser as chunks, so they can begin before the complete
+media file has been saved on the server. The transfer speed still depends on Telegram and
+the connection. PHP output buffering or a reverse proxy may need to be disabled/configured
+to pass chunks through immediately.
 
 ### Example MadelineProto Usage
 ```php
