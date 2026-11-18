@@ -343,7 +343,7 @@ try {
     file_get_contents('http://127.0.0.1:' . $port . '/', false, $context);
     $assert(isset($http_response_header[0]) && str_contains($http_response_header[0], '302'), 'The conversation directory should remain protected from unauthenticated requests.');
 
-    $homeRequest = static function (string $sessionId) use ($port): array {
+    $homeRequest = static function (string $sessionId, string $path = '/') use ($port): array {
         $context = stream_context_create([
             'http' => [
                 'header' => 'Cookie: ' . session_name() . '=' . $sessionId,
@@ -351,7 +351,7 @@ try {
                 'timeout' => 5,
             ],
         ]);
-        $body = file_get_contents('http://127.0.0.1:' . $port . '/', false, $context);
+        $body = file_get_contents('http://127.0.0.1:' . $port . $path, false, $context);
 
         return [$http_response_header[0] ?? '', $body === false ? '' : $body];
     };
@@ -359,7 +359,7 @@ try {
     [$emptyCacheStatus, $emptyCacheBody] = $homeRequest($seedSession([], true));
     $assert(str_contains($emptyCacheStatus, '200'), 'A Telegram loading error should still render the authenticated home page.');
     $assert(str_contains($emptyCacheBody, 'Error loading conversations:'), 'The home page should report a failed conversation load.');
-    $assert(!str_contains($emptyCacheBody, 'No conversations found.'), 'A failed conversation load should not be presented as a successful empty result.');
+    $assert(str_contains($emptyCacheBody, 'Conversation list unavailable'), 'A failed conversation load should not be presented as a successful empty result.');
 
     [$cachedStatus, $cachedBody] = $homeRequest($seedSession([
         ['id' => -10077, 'name' => 'Previously cached channel', 'type' => 'channel', 'username' => ''],
@@ -372,6 +372,37 @@ try {
     $assert(str_contains($reloadedStatus, '200'), 'An outdated empty cache should be refreshed successfully.');
     $assert(str_contains($reloadedBody, 'Reloaded channel'), 'The home page should render conversations returned by the refreshed directory.');
     $assert(str_contains($reloadedBody, 'href="/media?chat=-1001234567890"'), 'The refreshed channel should link to its media page using the numeric Telegram ID.');
+    $assert(str_contains($reloadedBody, 'name="chat"'), 'The manual conversation form should remain available.');
+
+    $presentationDialogs = [];
+    for ($index = 1; $index <= 26; $index++) {
+        $presentationDialogs[] = [
+            'id' => 1000 + $index,
+            'name' => $index === 1 ? '<img src=x onerror=alert(1)> Paged conversation 1' : 'Paged conversation ' . $index,
+            'type' => $index % 2 === 0 ? 'group' : 'channel',
+            'username' => $index === 1 ? 'sample_channel' : '',
+        ];
+    }
+    $presentationSession = $seedSession($presentationDialogs, false, 3);
+    [$firstPageStatus, $firstPageBody] = $homeRequest($presentationSession, '/?q=Paged');
+    $assert(str_contains($firstPageStatus, '200'), 'A filtered conversation list should render successfully.');
+    $assert(str_contains($firstPageBody, 'Page 1 of 2'), 'The conversation list should show its current page and total pages.');
+    $assert(str_contains($firstPageBody, '&lt;img src=x onerror=alert(1)&gt;'), 'Telegram conversation names should remain HTML-escaped.');
+    $assert(!str_contains($firstPageBody, '<img src=x onerror=alert(1)>'), 'Telegram conversation names should not be rendered as markup.');
+    $assert(str_contains($firstPageBody, '@sample_channel'), 'Conversation usernames should be shown beneath their names.');
+    $assert(str_contains($firstPageBody, 'href="/?page=2&amp;q=Paged"'), 'Pagination should preserve the current search query.');
+    $assert(str_contains($firstPageBody, 'href="/?refresh=1&amp;q=Paged"'), 'Refreshing should preserve the current search query.');
+    $assert(str_contains($firstPageBody, 'href="/">Clear search'), 'A filtered directory should offer a clear-search link.');
+    $assert(str_contains($firstPageBody, 'class="home-layout"') && str_contains($firstPageBody, 'class="card manual-card"'), 'The home page should group the directory and manual access in distinct layout panels.');
+
+    [, $secondPageBody] = $homeRequest($presentationSession, '/?q=Paged&page=2');
+    $assert(str_contains($secondPageBody, 'Page 2 of 2'), 'The next conversation page should render its page number.');
+    $assert(str_contains($secondPageBody, 'Paged conversation 26'), 'The final conversation should appear on the second page.');
+    $assert(str_contains($secondPageBody, 'href="/?page=1&amp;q=Paged"'), 'The previous-page link should preserve the current search query.');
+
+    [, $noMatchesBody] = $homeRequest($presentationSession, '/?q=NotFound');
+    $assert(str_contains($noMatchesBody, 'No matching conversations'), 'A search with no results should have a distinct empty state.');
+    $assert(str_contains($noMatchesBody, 'href="/">Clear search'), 'The no-results state should provide a way to reset the search.');
 } finally {
     proc_terminate($server);
     proc_close($server);

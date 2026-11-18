@@ -147,6 +147,108 @@ button:hover {
     margin-top: 1rem;
 }
 
+.home-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.36fr);
+    align-items: start;
+    gap: 1rem;
+}
+
+.conversation-card,
+.manual-card {
+    min-width: 0;
+}
+
+.section-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.section-heading h2,
+.manual-card h2 {
+    margin: 0;
+}
+
+.section-heading + .muted {
+    margin-top: 0.5rem;
+}
+
+.eyebrow {
+    margin: 0 0 0.35rem;
+    color: #626b74;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.directory-actions,
+.directory-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.directory-actions {
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+}
+
+.directory-summary {
+    margin: 1.25rem 0 0;
+    font-size: 0.9rem;
+}
+
+.directory-table td:first-child {
+    font-weight: 600;
+}
+
+.conversation-name,
+.conversation-username {
+    display: block;
+}
+
+.conversation-username {
+    margin-top: 0.15rem;
+    color: #626b74;
+    font-size: 0.875rem;
+    font-weight: 400;
+}
+
+.browse-link {
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.browse-link span {
+    margin-left: 0.15rem;
+}
+
+.empty-state {
+    margin-top: 1.25rem;
+    padding: 1.25rem;
+    background: #f8f9fa;
+    border: 1px solid #e8ebed;
+    border-radius: 0.5rem;
+}
+
+.empty-state h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.empty-state p {
+    margin: 0.4rem 0 0.75rem;
+}
+
+.manual-card {
+    position: sticky;
+    top: 1rem;
+}
+
 .directory-table {
     width: 100%;
     margin-top: 1rem;
@@ -185,6 +287,16 @@ a {
 
 a:hover {
     color: #194879;
+}
+
+@media (max-width: 960px) {
+    .home-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .manual-card {
+        position: static;
+    }
 }
 
 @media (max-width: 840px) {
@@ -252,5 +364,18 @@ a:hover {
 
     .directory-search button {
         justify-self: stretch;
+    }
+
+    .directory-actions,
+    .directory-summary {
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 380px) {
+    .directory-actions,
+    .directory-summary {
+        flex-direction: column;
+        gap: 0.4rem;
     }
 }

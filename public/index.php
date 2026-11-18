@@ -125,30 +125,46 @@ $renderHome = static function (Response $response, callable $clientFactory, stri
     $dialogs = is_array($_SESSION['dialogs'] ?? null) ? $_SESSION['dialogs'] : [];
     $directory = DialogDirectory::filterAndPaginate($dialogs, $query, $page);
     $escapedQuery = htmlspecialchars($query, ENT_QUOTES, 'UTF-8');
-    $content = '<section class="card">';
-    $content .= '<h2>Conversations</h2>';
+    $content = '<div class="home-layout">';
+    $content .= '<section class="card conversation-card" aria-labelledby="conversations-heading">';
+    $content .= '<div class="section-heading"><div><p class="eyebrow">YOUR LIBRARY</p><h2 id="conversations-heading">Conversations</h2></div>';
+    $content .= '<a class="text-link" href="/logout">Logout</a></div>';
     $content .= '<p class="muted">Browse media from your chats, channels and groups.</p>';
     if ($error !== '') {
-        $content .= '<p class="error">' . htmlspecialchars($error, ENT_QUOTES, 'UTF-8') . '</p>';
+        $content .= '<p class="error" role="alert">' . htmlspecialchars($error, ENT_QUOTES, 'UTF-8') . '</p>';
     }
     $content .= '<form method="get" action="/" class="directory-search">';
     $content .= '<label>Search conversations<input type="search" name="q" value="' . $escapedQuery . '" placeholder="Name, username or ID"></label>';
     $content .= '<button type="submit">Search</button></form>';
+    $content .= '<div class="directory-actions">';
+    if ($query !== '') {
+        $content .= '<a href="/">Clear search</a>';
+    } else {
+        $content .= '<span class="muted">Search by name, username or ID</span>';
+    }
     $refreshUrl = '/?refresh=1' . ($query !== '' ? '&q=' . rawurlencode($query) : '');
-    $content .= '<p><a href="' . htmlspecialchars($refreshUrl, ENT_QUOTES, 'UTF-8') . '">Refresh conversations</a></p>';
+    $content .= '<a class="text-link" href="' . htmlspecialchars($refreshUrl, ENT_QUOTES, 'UTF-8') . '">Refresh list</a></div>';
 
     if ($directory['total'] === 0 && $error === '') {
-        $content .= '<p class="muted">No conversations found.</p>';
+        if ($query !== '') {
+            $content .= '<div class="empty-state"><h3>No matching conversations</h3><p class="muted">Try a different name, username or ID.</p><a href="/">Clear search</a></div>';
+        } else {
+            $content .= '<div class="empty-state"><h3>No conversations found</h3><p class="muted">Refresh the list or open a conversation manually.</p></div>';
+        }
     } elseif ($directory['total'] > 0) {
-        $content .= '<p class="muted">' . $directory['total'] . ' conversations · page ' . $directory['page'] . ' of ' . $directory['pages'] . '</p>';
+        $content .= '<p class="directory-summary"><span><strong>' . $directory['total'] . '</strong> ' . ($directory['total'] === 1 ? 'conversation' : 'conversations') . '</span><span class="muted">Page ' . $directory['page'] . ' of ' . $directory['pages'] . '</span></p>';
         $content .= '<table class="directory-table"><thead><tr><th scope="col">Conversation</th><th scope="col">Type</th><th scope="col">ID</th><th scope="col">Action</th></tr></thead><tbody>';
         foreach ($directory['items'] as $dialog) {
             $mediaUrl = '/media?chat=' . rawurlencode((string) $dialog['id']);
             $content .= '<tr>';
-            $content .= '<td data-label="Conversation">' . htmlspecialchars($dialog['name'], ENT_QUOTES, 'UTF-8') . '</td>';
+            $content .= '<td data-label="Conversation"><span class="conversation-name">' . htmlspecialchars($dialog['name'], ENT_QUOTES, 'UTF-8') . '</span>';
+            if (($dialog['username'] ?? '') !== '') {
+                $content .= '<span class="conversation-username">@' . htmlspecialchars($dialog['username'], ENT_QUOTES, 'UTF-8') . '</span>';
+            }
+            $content .= '</td>';
             $content .= '<td data-label="Type">' . htmlspecialchars($dialog['type'], ENT_QUOTES, 'UTF-8') . '</td>';
             $content .= '<td data-label="ID">' . htmlspecialchars((string) $dialog['id'], ENT_QUOTES, 'UTF-8') . '</td>';
-            $content .= '<td data-label="Action"><a href="' . htmlspecialchars($mediaUrl, ENT_QUOTES, 'UTF-8') . '">Browse media</a></td>';
+            $content .= '<td data-label="Action"><a class="browse-link" href="' . htmlspecialchars($mediaUrl, ENT_QUOTES, 'UTF-8') . '">Browse media <span aria-hidden="true">→</span></a></td>';
             $content .= '</tr>';
         }
         $content .= '</tbody></table>';
@@ -162,12 +178,15 @@ $renderHome = static function (Response $response, callable $clientFactory, stri
             $content .= '<a href="' . htmlspecialchars($nextUrl, ENT_QUOTES, 'UTF-8') . '">Next</a>';
         }
         $content .= '</nav>';
+    } elseif ($error !== '') {
+        $content .= '<div class="empty-state"><h3>Conversation list unavailable</h3><p class="muted">You can try refreshing or use the manual form.</p></div>';
     }
     $content .= '</section>';
 
     $content .= <<<HTML
-<section class="card">
-    <h2>Open a conversation manually</h2>
+<aside class="card manual-card" aria-labelledby="manual-heading">
+    <p class="eyebrow">DIRECT ACCESS</p>
+    <h2 id="manual-heading">Open a conversation</h2>
     <p class="muted">You can also enter a public username, chat ID or phone number.</p>
     <form method="get" action="/media" class="stacked-form">
         <label>Chat, channel or group
@@ -184,8 +203,8 @@ $renderHome = static function (Response $response, callable $clientFactory, stri
         </label>
         <button type="submit">Browse</button>
     </form>
-    <p class="muted"><a href="/logout">Logout</a></p>
-</section>
+</aside>
+</div>
 HTML;
 
     $response->getBody()->write($renderLayout('Telegram Media Downloader', $content));
