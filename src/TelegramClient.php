@@ -4,9 +4,11 @@ namespace claserre9;
 
 use danog\MadelineProto\API;
 use danog\MadelineProto\Exception;
+use danog\MadelineProto\Ipc\Client;
 use danog\MadelineProto\Settings;
 use danog\MadelineProto\Settings\AppInfo;
 use danog\MadelineProto\SettingsAbstract;
+use danog\MadelineProto\Tools;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -22,6 +24,7 @@ class TelegramClient
     private readonly string $telegramApiHash;
     private ?API $madeline = null;
     private ?Settings $settings = null;
+    private readonly string $sessionPath;
 
     /**
      * @param int $telegramApiId The Telegram API ID.
@@ -41,8 +44,9 @@ class TelegramClient
         $this->telegramApiId = $telegramApiId;
         $this->telegramApiHash = $telegramApiHash;
 
+        $this->sessionPath = $sessionPath ?? 'session.madeline';
         $this->setClientSettings();
-        $this->init($this->settings, $sessionPath ?? 'session.madeline');
+        $this->init($this->settings, $this->sessionPath);
     }
 
     /**
@@ -77,7 +81,10 @@ class TelegramClient
     }
 
     /**
-     * Starts the Madeline instance.
+     * Log in from the terminal by QR code only, then start the Madeline instance.
+     *
+     * The QR code is printed in the terminal and must be scanned from an official Telegram app
+     * (Settings → Devices → Link Desktop Device). Phone-number and bot-token logins are not offered.
      *
      * @return void
      * @throws RuntimeException If the Madeline instance is not initialized or fails to start.
@@ -89,9 +96,37 @@ class TelegramClient
         }
 
         try {
+            $this->abandonPendingCodeLogin();
+            $qrCode = $this->madeline->getAuthorization() === API::NOT_LOGGED_IN ? $this->madeline->qrLogin() : null;
+            if ($qrCode !== null) {
+                fwrite(STDOUT, 'Scan this QR code with Telegram on your phone: Settings → Devices → Link Desktop Device.' . PHP_EOL);
+            }
+            while ($qrCode !== null) {
+                fwrite(STDOUT, $qrCode->getQRText(2) . PHP_EOL);
+                $qrCode = $qrCode->waitForLoginOrQrCodeExpiration();
+                if ($qrCode !== null) {
+                    fwrite(STDOUT, 'The QR code expired; scan this new one.' . PHP_EOL);
+                }
+            }
+            if ($this->madeline->getAuthorization() === API::WAITING_PASSWORD) {
+                $this->madeline->complete2faLogin(Tools::readLine('Two-step verification password: ', hidden: true));
+            }
+            if ($this->madeline->getAuthorization() !== API::LOGGED_IN) {
+                throw new RuntimeException('Telegram login was not completed.');
+            }
             $this->madeline->start();
         } catch (Throwable $e) {
             throw new RuntimeException('Failed to start Madeline: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /**
+     * Drop a phone-code login left pending by an older version of this app; it would block QR login.
+     */
+    protected function abandonPendingCodeLogin(): void
+    {
+        if ($this->madeline && in_array($this->madeline->getAuthorization(), [API::WAITING_CODE, API::WAITING_SIGNUP], true)) {
+            Client::giveInstanceBySession($this->madeline->getSessionName())->setLoginState(API::NOT_LOGGED_IN);
         }
     }
 
@@ -103,5 +138,13 @@ class TelegramClient
     public function getMadeline(): ?API
     {
         return $this->madeline;
+    }
+
+    /**
+     * The MadelineProto session path this client was created with.
+     */
+    public function getSessionPath(): string
+    {
+        return $this->sessionPath;
     }
 }

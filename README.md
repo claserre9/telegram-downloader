@@ -50,7 +50,9 @@ To use Telegram Downloader, follow these steps:
    ```
    php bin/console tdm
    ````
-3. Follow the prompts to log in to Telegram.
+3. On first run, a QR code is printed in the terminal. Scan it from Telegram on your phone
+   (**Settings → Devices → Link Desktop Device**), then enter your two-step verification
+   password if asked. Phone-number and bot-token logins are not offered.
 
 #### Note
 
@@ -58,25 +60,33 @@ You can pass credentials directly with `TELEGRAM_CHANNEL=channel TELEGRAM_API_HA
 
 If you set `variables_order = "EGPCS"` in `/etc/php/php.ini` (`E` is required for ENV).
 
-## Web Interface (Slim v4)
-The lightweight web UI now runs on [Slim v4](https://www.slimframework.com/).
+## Web Interface (Slim v4 and Twig)
+The lightweight web UI runs on [Slim v4](https://www.slimframework.com/) with [Twig](https://twig.symfony.com/) templates.
 Run the built-in server with the Slim front controller:
 
 ```bash
 php -S localhost:8000 -t public public/index.php
 ```
 
-Visit `http://localhost:8000`. Use the two-step login form (phone → code/2FA),
-then search and paginate through conversations, groups and channels from the account. The
+Visit `http://localhost:8000` and log in by QR code: open Telegram on your phone, go to
+**Settings → Devices → Link Desktop Device**, and scan the code shown on the page. The page
+refreshes automatically and renews the code when it expires. Accounts with two-step
+verification then enter their password on a separate step. Phone-number login codes are not
+supported, because Telegram often does not deliver them to third-party apps.
+Then search and paginate through conversations, groups and channels from the account. The
 conversation list includes archived chats, is cached in the web session while navigating,
 and can be refreshed explicitly; the first load may take longer for accounts with many chats.
-Each new browser session uses its own MadelineProto session file in `sessions/`, so a restart
-or a previously authorized session will not block a fresh code request. Keep the PHP browser
-session cookie to continue the same login; if it is lost, request a new Telegram code. Existing
-PHP sessions that were already logged in before this change continue to use `sessions/web.session`.
-Logging out clears only this web session and does not revoke Telegram authorization; revoke an
-authorization from Telegram's **Settings → Devices** when needed. Treat all files in `sessions/`
-as secrets and do not share or expose them.
+HTTP actions and presentation data are handled in `src/WebController.php`; the shared page
+layout and individual login, conversation, and media views live in `templates/`. Twig's HTML
+auto-escaping is enabled for rendered values. `public/index.php` is kept as the Slim front
+controller for dependency setup, route registration, static CSS, and streamed downloads.
+Each browser uses its own MadelineProto session in `sessions/`. A `tg_session` cookie (HttpOnly,
+30 days, renewed on every visit) links the browser to that session, so the login survives a
+browser or server restart and the expiry of the PHP session; it is only trusted while the
+Telegram session is still authorized. Logging out revokes the Telegram authorization, stops the
+session's worker, deletes its files and clears the cookie. Existing PHP sessions that were
+already logged in before per-browser sessions continue to use `sessions/web.session`.
+Treat all files in `sessions/` as secrets and do not share or expose them.
 Use the manual chat field if a conversation is not listed. Then browse media by chat/channel,
 filter by type, paginate, and download files. Downloads
 are streamed from Telegram to the browser as chunks, so they can begin before the complete
@@ -86,9 +96,9 @@ to pass chunks through immediately.
 
 ### Example MadelineProto Usage
 ```php
-$client = new WebTelegramClient($apiId, $apiHash, 'sessions/web.session');
-$client->requestCode($phone);        // messages.sendCode
-$client->completeCode($code);        // auth.signIn
+$client = new WebTelegramClient($apiId, $apiHash, 'sessions/web-<id>.session');
+$qr = $client->qrLogin();             // auth.exportLoginToken; poll until status is not 'pending'
+$client->completePassword($password); // only if qrLogin() returned status 'password'
 $messages = $client->getMedia($chat); // messages.getHistory
 ```
 

@@ -1,0 +1,37 @@
+{% extends 'base.html.twig' %}
+
+{% block content %}
+<section class="card">
+    <p class="muted"><a href="/">Back</a></p>
+
+    {% if error %}
+        <p class="error" role="alert">{{ error }}</p>
+    {% endif %}
+
+    {% if chat == '' %}
+        <p class="muted">No chat selected.</p>
+    {% else %}
+        <h2>Media in {{ chat }}</h2>
+        {% if rows is empty %}
+            <p class="muted">No media found.</p>
+        {% else %}
+            <table class="media-table">
+                <thead><tr><th scope="col">ID</th><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Name</th><th scope="col">Size</th><th scope="col">Action</th></tr></thead>
+                <tbody>
+                {% for row in rows %}
+                    <tr>
+                        <td data-label="ID">{{ row.id }}</td>
+                        <td data-label="Date">{{ row.date }}</td>
+                        <td data-label="Type">{{ row.type }}</td>
+                        <td data-label="Name">{{ row.name }}</td>
+                        <td data-label="Size">{{ row.size }}</td>
+                        <td data-label="Action"><a href="{{ row.downloadUrl }}">Download</a></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% if olderUrl %}<p><a href="{{ olderUrl }}">Older messages</a></p>{% endif %}
+        {% endif %}
+    {% endif %}
+</section>
+{% endblock %}

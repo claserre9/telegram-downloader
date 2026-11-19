@@ -23,6 +23,34 @@ class SimulatedDialogDirectoryWebTelegramClient extends WebTelegramClient
             ['id' => 501, 'name' => 'Reloaded conversation', 'type' => 'user', 'username' => 'reloaded_user'],
         ];
     }
+
+    public function getMedia(string $chat, string $type = '', int $offsetId = 0, int $limit = 20): array
+    {
+        return [
+            [
+                'id' => 707,
+                'date' => 1700000000,
+                'media' => [
+                    '_' => 'messageMediaDocument',
+                    'document' => [
+                        'mime_type' => 'video/mp4',
+                        'size' => 1048576,
+                        'attributes' => [
+                            ['_' => 'documentAttributeFilename', 'file_name' => '<video & clip>.mp4'],
+                        ],
+                    ],
+                ],
+            ],
+            [
+                'id' => 706,
+                'date' => 1700000001,
+                'media' => [
+                    '_' => 'messageMediaPhoto',
+                    'photo' => ['sizes' => [['size' => 2048]]],
+                ],
+            ],
+        ];
+    }
 }
 
 $GLOBALS['telegramWebClientConstructor'] = static function (int $apiId, string $apiHash, string $sessionPath): WebTelegramClient {

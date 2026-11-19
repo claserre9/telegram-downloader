@@ -13,36 +13,75 @@ if (!class_exists(SimulatedWebTelegramClient::class, false)) {
         {
         }
 
-        public function requestCode(string $phone): void
+        public static function authMarker(string $sessionPath): string
         {
-            if (basename($this->sessionPath) === 'web.session') {
-                throw new RuntimeException('This instance of MadelineProto is already logged in!');
-            }
-
-            $_SESSION['simulated_telegram_session_path'] = $this->sessionPath;
-            $_SESSION['simulated_phone'] = $phone;
+            return sys_get_temp_dir() . '/simulated-telegram-auth-' . md5($sessionPath);
         }
 
-        public function completeCode(string $code, ?string $password = null): void
+        public static function logoutMarker(string $sessionPath): string
         {
-            if (
-                ($_SESSION['simulated_telegram_session_path'] ?? null) !== $this->sessionPath
-                || !isset($_SESSION['simulated_phone'])
-            ) {
-                throw new RuntimeException('The Telegram session changed between requesting and validating the code.');
+            return sys_get_temp_dir() . '/simulated-telegram-logout-' . md5($sessionPath);
+        }
+
+        private function markAuthenticated(): void
+        {
+            $_SESSION['simulated_authenticated_path'] = $this->sessionPath;
+            file_put_contents(self::authMarker($this->sessionPath), '1');
+        }
+
+        public function isAuthorized(): bool
+        {
+            return is_file(self::authMarker($this->sessionPath));
+        }
+
+        public function logout(): void
+        {
+            if (is_file(self::authMarker($this->sessionPath))) {
+                unlink(self::authMarker($this->sessionPath));
             }
-            if ($code !== '12345') {
-                throw new RuntimeException('Invalid simulated Telegram code.');
+            file_put_contents(self::logoutMarker($this->sessionPath), '1');
+        }
+
+        public function completePassword(string $password): void
+        {
+            if (!($_SESSION['simulated_password_pending'] ?? false) || $password !== 'valid-password') {
+                throw new RuntimeException('Invalid simulated Telegram password.');
             }
 
-            $_SESSION['simulated_authenticated_path'] = $this->sessionPath;
+            $this->markAuthenticated();
+            unset($_SESSION['simulated_password_pending']);
+        }
+
+        public function qrLogin(): array
+        {
+            $_SESSION['simulated_telegram_session_path'] = $this->sessionPath;
+            $_SESSION['simulated_qr_polls'] = (int) ($_SESSION['simulated_qr_polls'] ?? 0) + 1;
+            if ($_SESSION['simulated_qr_failure'] ?? false) {
+                throw new RuntimeException('Telegram refused the simulated QR login.');
+            }
+
+            $scan = $_SESSION['simulated_qr_scan'] ?? null;
+            if ($scan === 'logged_in') {
+                $this->markAuthenticated();
+                return ['status' => 'logged_in'];
+            }
+            if ($scan === 'password') {
+                $_SESSION['simulated_password_pending'] = true;
+                return ['status' => 'password'];
+            }
+
+            return [
+                'status' => 'pending',
+                'svg' => '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>',
+                'expires_in' => 30,
+            ];
         }
 
         public function getConversations(): array
         {
             $isLegacySession = basename($this->sessionPath) === 'web.session'
                 && ($_SESSION['logged_in'] ?? false) === true;
-            if (!$isLegacySession && ($_SESSION['simulated_authenticated_path'] ?? null) !== $this->sessionPath) {
+            if (!$isLegacySession && !$this->isAuthorized()) {
                 throw new RuntimeException('The simulated Telegram session is not authenticated.');
             }
 

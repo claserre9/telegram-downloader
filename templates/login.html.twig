@@ -1,0 +1,30 @@
+{% extends 'base.html.twig' %}
+
+{% block head %}
+    {% if step == 'qr' %}<meta http-equiv="refresh" content="5">{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="card">
+    {% if message %}
+        <p class="error" role="alert">{{ message }}</p>
+    {% endif %}
+
+    {% if step == 'password' %}
+        <p class="muted">Telegram accepted the QR code. Enter your two-step verification password to finish signing in.</p>
+        <form method="post" class="stacked-form">
+            <label>Two-step verification password
+                <input type="password" name="password" required autocomplete="current-password">
+            </label>
+            <button type="submit">Verify password</button>
+        </form>
+        <p class="muted"><a href="/logout">Cancel and start over</a></p>
+    {% elseif qrImage %}
+        <p>Open Telegram on your phone, go to <strong>Settings → Devices → Link Desktop Device</strong>, then scan this code.</p>
+        <img class="qr-code" src="{{ qrImage }}" width="320" height="320" alt="Telegram login QR code">
+        <p class="muted" role="status">This page refreshes automatically. The code renews in {{ qrExpiresIn }} seconds.</p>
+    {% else %}
+        <p class="muted" role="status">Waiting for Telegram… this page refreshes automatically.</p>
+    {% endif %}
+</section>
+{% endblock %}

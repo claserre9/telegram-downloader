@@ -50,10 +50,25 @@ foreach ([$projectRoot, $publicRoot] as $documentRoot) {
     fclose($socket);
     $port = (int) substr((string) strrchr((string) $address, ':'), 1);
 
+    // The simulated Telegram client keeps the login page from contacting Telegram or creating real sessions.
+    $serverEnvironment = getenv();
+    $serverEnvironment['TELEGRAM_API_ID'] = '12345';
+    $serverEnvironment['TELEGRAM_API_HASH'] = 'simulated-api-hash';
     $server = proc_open(
-        [PHP_BINARY, '-S', '127.0.0.1:' . $port, '-t', $documentRoot, $publicRoot . '/index.php'],
+        [
+            PHP_BINARY,
+            '-d',
+            'variables_order=EGPCS',
+            '-S',
+            '127.0.0.1:' . $port,
+            '-t',
+            $documentRoot,
+            $projectRoot . '/tests/support/telegram_login_router.php',
+        ],
         [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'a'], 2 => ['file', '/dev/null', 'a']],
-        $serverPipes
+        $serverPipes,
+        null,
+        $serverEnvironment
     );
     if (!is_resource($server)) {
         throw new RuntimeException('The HTTP test server should start.');

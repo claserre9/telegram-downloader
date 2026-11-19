@@ -403,6 +403,19 @@ try {
     [, $noMatchesBody] = $homeRequest($presentationSession, '/?q=NotFound');
     $assert(str_contains($noMatchesBody, 'No matching conversations'), 'A search with no results should have a distinct empty state.');
     $assert(str_contains($noMatchesBody, 'href="/">Clear search'), 'The no-results state should provide a way to reset the search.');
+
+    [$mediaStatus, $mediaBody] = $homeRequest($presentationSession, '/media?chat=%40sample%26channel&type=video');
+    $assert(str_contains($mediaStatus, '200'), 'An authenticated media page should render successfully.');
+    $assert(str_contains($mediaBody, 'Media in @sample&amp;channel'), 'Chat identifiers should be escaped in the media heading.');
+    $assert(str_contains($mediaBody, '&lt;video &amp; clip&gt;.mp4'), 'Media filenames should be escaped by the template.');
+    $assert(!str_contains($mediaBody, '<video & clip>.mp4'), 'Media filenames should not be rendered as markup.');
+    $assert(str_contains($mediaBody, 'data-label="Type">video</td>'), 'Document MIME types should still be presented as videos.');
+    $assert(str_contains($mediaBody, 'href="/download?chat=%40sample%26channel&amp;id=707"'), 'Media download links should encode chat identifiers.');
+    $assert(str_contains($mediaBody, 'href="/media?chat=%40sample%26channel&amp;type=video&amp;offset=706"'), 'Older-media links should preserve their query parameters.');
+    $assert(!str_contains($mediaBody, 'photo_706.jpg'), 'The media type filter should exclude photos from a video listing.');
+
+    [$noChatStatus, $noChatBody] = $homeRequest($presentationSession, '/media');
+    $assert(str_contains($noChatStatus, '200') && str_contains($noChatBody, 'No chat selected.'), 'The media template should handle a missing chat selection.');
 } finally {
     proc_terminate($server);
     proc_close($server);

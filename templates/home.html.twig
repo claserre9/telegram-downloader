@@ -1,0 +1,96 @@
+{% extends 'base.html.twig' %}
+
+{% block content %}
+<div class="home-layout">
+    <section class="card conversation-card" aria-labelledby="conversations-heading">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">YOUR LIBRARY</p>
+                <h2 id="conversations-heading">Conversations</h2>
+            </div>
+            <a class="text-link" href="/logout">Logout</a>
+        </div>
+        <p class="muted">Browse media from your chats, channels and groups.</p>
+        {% if error %}
+            <p class="error" role="alert">{{ error }}</p>
+        {% endif %}
+        <form method="get" action="/" class="directory-search">
+            <label>Search conversations<input type="search" name="q" value="{{ query }}" placeholder="Name, username or ID"></label>
+            <button type="submit">Search</button>
+        </form>
+        <div class="directory-actions">
+            {% if query %}
+                <a href="/">Clear search</a>
+            {% else %}
+                <span class="muted">Search by name, username or ID</span>
+            {% endif %}
+            <a class="text-link" href="{{ refreshUrl }}">Refresh list</a>
+        </div>
+
+        {% if directory.total == 0 and not error %}
+            {% if query %}
+                <div class="empty-state">
+                    <h3>No matching conversations</h3>
+                    <p class="muted">Try a different name, username or ID.</p>
+                    <a href="/">Clear search</a>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <h3>No conversations found</h3>
+                    <p class="muted">Refresh the list or open a conversation manually.</p>
+                </div>
+            {% endif %}
+        {% elseif directory.total > 0 %}
+            <p class="directory-summary"><span><strong>{{ directory.total }}</strong> {{ directory.total == 1 ? 'conversation' : 'conversations' }}</span><span class="muted">Page {{ directory.page }} of {{ directory.pages }}</span></p>
+            <table class="directory-table">
+                <thead><tr><th scope="col">Conversation</th><th scope="col">Type</th><th scope="col">ID</th><th scope="col">Action</th></tr></thead>
+                <tbody>
+                {% for dialog in directory.items %}
+                    <tr>
+                        <td data-label="Conversation">
+                            <span class="conversation-name">{{ dialog.name }}</span>
+                            {% if dialog.username|default('') != '' %}
+                                <span class="conversation-username">@{{ dialog.username }}</span>
+                            {% endif %}
+                        </td>
+                        <td data-label="Type">{{ dialog.type }}</td>
+                        <td data-label="ID">{{ dialog.id }}</td>
+                        <td data-label="Action"><a class="browse-link" href="{{ dialog.mediaUrl }}">Browse media <span aria-hidden="true">→</span></a></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            <nav class="pagination" aria-label="Conversation pages">
+                {% if directory.previousUrl %}<a href="{{ directory.previousUrl }}">Previous</a>{% endif %}
+                {% if directory.nextUrl %}<a href="{{ directory.nextUrl }}">Next</a>{% endif %}
+            </nav>
+        {% elseif error %}
+            <div class="empty-state">
+                <h3>Conversation list unavailable</h3>
+                <p class="muted">You can try refreshing or use the manual form.</p>
+            </div>
+        {% endif %}
+    </section>
+
+    <aside class="card manual-card" aria-labelledby="manual-heading">
+        <p class="eyebrow">DIRECT ACCESS</p>
+        <h2 id="manual-heading">Open a conversation</h2>
+        <p class="muted">You can also enter a public username, chat ID or phone number.</p>
+        <form method="get" action="/media" class="stacked-form">
+            <label>Chat, channel or group
+                <input type="text" name="chat" required placeholder="@channel or chat id">
+            </label>
+            <label>Type
+                <select name="type">
+                    <option value="">All</option>
+                    <option value="photo">Photos</option>
+                    <option value="video">Videos</option>
+                    <option value="document">Documents</option>
+                    <option value="audio">Audio</option>
+                </select>
+            </label>
+            <button type="submit">Browse</button>
+        </form>
+    </aside>
+</div>
+{% endblock %}

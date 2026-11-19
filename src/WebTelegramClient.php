@@ -2,6 +2,7 @@
 
 namespace claserre9;
 
+use danog\MadelineProto\API;
 use RuntimeException;
 use Throwable;
 
@@ -34,60 +35,91 @@ class WebTelegramClient extends TelegramClient
     }
 
     /**
-     * Request a login code to be sent to the user's phone.
+     * Complete two-step verification after the QR code was scanned.
      *
-     * @param string $phone The phone number in international format.
-     * @return void
-     * @throws \InvalidArgumentException If the phone number is invalid.
      * @throws RuntimeException If Madeline is not initialized.
-     * @throws Throwable If the request fails.
+     * @throws Throwable If the password is rejected or login fails.
      */
-    public function requestCode(string $phone): void
+    public function completePassword(#[\SensitiveParameter] string $password): void
     {
-        $phone = trim($phone);
-        if (!preg_match('/^\+?[1-9]\d{1,14}$/', $phone)) {
-            throw new \InvalidArgumentException('Invalid phone number format.');
-        }
-
         $madeline = $this->getMadeline();
         if (!$madeline) {
             throw new RuntimeException('Madeline not initialized');
         }
-        $madeline->phoneLogin($phone);
+
+        $madeline->complete2faLogin($password);
+        if ($madeline->getAuthorization() !== API::LOGGED_IN) {
+            throw new RuntimeException('Telegram authorization was not finalized.');
+        }
+        $this->ensureStarted();
     }
 
     /**
-     * Complete the phone login with the received code and optional password.
+     * Start or poll a QR-code login.
      *
-     * @param string $code The verification code received via SMS/Telegram.
-     * @param string|null $password The 2FA password, if enabled.
-     * @return void
-     * @throws \InvalidArgumentException If the code is invalid.
-     * @throws RuntimeException If Madeline is not initialized or if 2FA password is required but not provided.
-     * @throws Throwable If the login fails.
+     * The QR code must be scanned from an official Telegram app (Settings → Devices → Link Desktop Device).
+     * Telegram confirms the scan asynchronously, so callers poll this method until it stops returning "pending".
+     *
+     * @return array{status: 'pending', svg: string, expires_in: int}|array{status: 'logged_in'}|array{status: 'password'}
+     * @throws RuntimeException If Madeline is not initialized or the login ends in an unsupported state.
+     * @throws Throwable If Telegram rejects the request.
      */
-    public function completeCode(string $code, ?string $password = null): void
+    public function qrLogin(): array
     {
-        $code = trim($code);
-        if (empty($code)) {
-            throw new \InvalidArgumentException('Code cannot be empty.');
-        }
-
         $madeline = $this->getMadeline();
         if (!$madeline) {
             throw new RuntimeException('Madeline not initialized');
         }
-        /** @var array{_: string} $authorization */
-        $authorization = $madeline->completePhoneLogin($code);
-        if ($authorization['_'] === 'account.password') {
-            if ($password === null || trim($password) === '') {
-                throw new RuntimeException('2FA password required');
-            }
-            $madeline->complete2faLogin($password);
+
+        $this->abandonPendingCodeLogin();
+        $qrCode = $madeline->getAuthorization() === API::NOT_LOGGED_IN ? $madeline->qrLogin() : null;
+        if ($qrCode !== null) {
+            return [
+                'status' => 'pending',
+                'svg' => $qrCode->getQRSvg(320, 2),
+                'expires_in' => $qrCode->expiresIn(),
+            ];
         }
 
-        // Finish startup after successful login to avoid interactive prompts on subsequent requests.
-        $this->ensureStarted();
+        $state = $madeline->getAuthorization();
+        if ($state === API::LOGGED_IN) {
+            $this->ensureStarted();
+            return ['status' => 'logged_in'];
+        }
+        if ($state === API::WAITING_PASSWORD) {
+            return ['status' => 'password'];
+        }
+
+        throw new RuntimeException('Telegram did not return a QR login code.');
+    }
+
+    /**
+     * Whether this browser's Telegram session is currently authorized.
+     */
+    public function isAuthorized(): bool
+    {
+        $madeline = $this->getMadeline();
+
+        return $madeline !== null && $madeline->getAuthorization() === API::LOGGED_IN;
+    }
+
+    /**
+     * Log out of Telegram and delete this browser's session files.
+     *
+     * The local files are removed even if Telegram cannot be reached, so the
+     * session cannot be reused; the error is rethrown so the caller can report it.
+     *
+     * @throws Throwable If Telegram rejects or cannot process the logout.
+     */
+    public function logout(): void
+    {
+        $madeline = $this->getMadeline();
+        try {
+            // Revokes the authorization on Telegram's side and stops this session's worker process.
+            $madeline?->logout();
+        } finally {
+            TelegramSessionPath::removeSessionDirectory($this->getSessionPath());
+        }
     }
 
     /**
