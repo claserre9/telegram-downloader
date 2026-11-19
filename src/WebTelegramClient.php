@@ -154,7 +154,7 @@ class WebTelegramClient extends TelegramClient
         // Resolve peer for reliability on private/supergroup IDs.
         $madeline->getPwrChat($chat);
 
-        $filter = $this->mapTypeToFilter($type);
+        $filter = MediaType::searchFilter($type);
         if ($filter !== null) {
             /** @var array{messages: array<int, array<string, mixed>>} $result */
             /** @phpstan-ignore-next-line */
@@ -220,23 +220,6 @@ class WebTelegramClient extends TelegramClient
     }
 
     /**
-     * Map UI media type to Telegram search filter.
-     *
-     * @param string $type The media type string.
-     * @return array{_: string}|null The Telegram search filter array or null.
-     */
-    private function mapTypeToFilter(string $type): ?array
-    {
-        return match ($type) {
-            'photo' => ['_' => 'inputMessagesFilterPhotos'],
-            'video' => ['_' => 'inputMessagesFilterVideo'],
-            'document' => ['_' => 'inputMessagesFilterDocument'],
-            'audio' => ['_' => 'inputMessagesFilterMusic'],
-            default => null,
-        };
-    }
-
-    /**
      * Filters a list of messages by media type.
      *
      * @param array<int, array<string, mixed>> $messages The list of messages.
@@ -249,25 +232,7 @@ class WebTelegramClient extends TelegramClient
             return $messages;
         }
 
-        $filtered = [];
-        foreach ($messages as $message) {
-            if (!isset($message['media'])) {
-                continue;
-            }
-
-            $mediaType = $message['media']['_'] ?? '';
-            if ($type === 'photo' && $mediaType === 'messageMediaPhoto') {
-                $filtered[] = $message;
-            } elseif ($type === 'document' && $mediaType === 'messageMediaDocument') {
-                $filtered[] = $message;
-            } elseif ($type === 'video' && $mediaType === 'messageMediaDocument' && isset($message['media']['document']['mime_type']) && str_starts_with($message['media']['document']['mime_type'], 'video')) {
-                $filtered[] = $message;
-            } elseif ($type === 'audio' && $mediaType === 'messageMediaDocument' && isset($message['media']['document']['mime_type']) && str_starts_with($message['media']['document']['mime_type'], 'audio')) {
-                $filtered[] = $message;
-            }
-        }
-
-        return $filtered;
+        return array_values(array_filter($messages, static fn (array $message): bool => MediaType::matches($message, $type)));
     }
 
     /**
@@ -279,18 +244,7 @@ class WebTelegramClient extends TelegramClient
      */
     public function formatSize(int $bytes, int $precision = 2): string
     {
-        if ($bytes <= 0) {
-            return '0 B';
-        }
-
-        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        $i = 0;
-        while ($bytes >= 1024 && $i < count($units) - 1) {
-            $bytes /= 1024;
-            $i++;
-        }
-
-        return round($bytes, $precision) . ' ' . $units[$i];
+        return FileSize::format($bytes, $precision);
     }
 
     /**

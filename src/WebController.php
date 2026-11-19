@@ -182,20 +182,7 @@ final class WebController
             foreach ($messages as $message) {
                 $media = is_array($message['media'] ?? null) ? $message['media'] : [];
                 $rawType = is_string($media['_'] ?? null) ? $media['_'] : '';
-                $typeDisplay = match ($rawType) {
-                    'messageMediaPhoto' => 'photo',
-                    'messageMediaDocument' => 'document',
-                    default => str_replace('messageMedia', '', $rawType),
-                };
-
-                if ($rawType === 'messageMediaDocument') {
-                    $mime = $media['document']['mime_type'] ?? '';
-                    if (is_string($mime) && str_starts_with($mime, 'video/')) {
-                        $typeDisplay = 'video';
-                    } elseif (is_string($mime) && str_starts_with($mime, 'audio/')) {
-                        $typeDisplay = 'audio';
-                    }
-                }
+                $typeDisplay = MediaType::of($message);
 
                 $messageId = (int) ($message['id'] ?? 0);
                 $date = date('Y-m-d H:i:s', (int) ($message['date'] ?? 0));

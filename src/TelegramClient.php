@@ -2,12 +2,14 @@
 
 namespace claserre9;
 
+use Closure;
 use danog\MadelineProto\API;
 use danog\MadelineProto\Exception;
 use danog\MadelineProto\Ipc\Client;
 use danog\MadelineProto\Settings;
 use danog\MadelineProto\Settings\AppInfo;
 use danog\MadelineProto\SettingsAbstract;
+use danog\MadelineProto\TL\Types\LoginQrCode;
 use danog\MadelineProto\Tools;
 use InvalidArgumentException;
 use RuntimeException;
@@ -83,38 +85,50 @@ class TelegramClient
     /**
      * Log in from the terminal by QR code only, then start the Madeline instance.
      *
-     * The QR code is printed in the terminal and must be scanned from an official Telegram app
-     * (Settings → Devices → Link Desktop Device). Phone-number and bot-token logins are not offered.
+     * The QR code must be scanned from an official Telegram app (Settings → Devices → Link Desktop Device).
+     * Phone-number and bot-token logins are not offered.
      *
+     * @param (Closure(string): void)|null $write Displays a message; defaults to standard output.
+     * @param (Closure(string): string)|null $askPassword Asks for the 2FA password without echoing it.
      * @return void
-     * @throws RuntimeException If the Madeline instance is not initialized or fails to start.
+     * @throws RuntimeException If the Madeline instance is not initialized or the login fails;
+     *                          see TerminalQrLogin::wasInterrupted() for Ctrl+C.
      */
-    public function start(): void
+    public function start(?Closure $write = null, ?Closure $askPassword = null): void
     {
-        if (!$this->madeline) {
+        $madeline = $this->madeline;
+        if (!$madeline) {
             throw new RuntimeException('Madeline not initialized.');
         }
 
+        $write ??= static function (string $message): void {
+            fwrite(STDOUT, $message . PHP_EOL);
+        };
+        $askPassword ??= static fn (string $prompt): string => Tools::readLine($prompt . ': ', hidden: true);
+
+        /** @var LoginQrCode|null $qrCode Shared by reference between the two QR closures. */
+        $qrCode = null;
+        $login = new TerminalQrLogin(
+            static fn (): int => $madeline->getAuthorization(),
+            $this->abandonPendingCodeLogin(...),
+            static function () use ($madeline, &$qrCode): ?string {
+                $qrCode = $madeline->qrLogin();
+                return $qrCode?->getQRText(2);
+            },
+            static function () use (&$qrCode): ?string {
+                $qrCode = $qrCode?->waitForLoginOrQrCodeExpiration();
+                return $qrCode?->getQRText(2);
+            },
+            static function (string $password) use ($madeline): void {
+                $madeline->complete2faLogin($password);
+            },
+            $write,
+            $askPassword,
+        );
+
         try {
-            $this->abandonPendingCodeLogin();
-            $qrCode = $this->madeline->getAuthorization() === API::NOT_LOGGED_IN ? $this->madeline->qrLogin() : null;
-            if ($qrCode !== null) {
-                fwrite(STDOUT, 'Scan this QR code with Telegram on your phone: Settings → Devices → Link Desktop Device.' . PHP_EOL);
-            }
-            while ($qrCode !== null) {
-                fwrite(STDOUT, $qrCode->getQRText(2) . PHP_EOL);
-                $qrCode = $qrCode->waitForLoginOrQrCodeExpiration();
-                if ($qrCode !== null) {
-                    fwrite(STDOUT, 'The QR code expired; scan this new one.' . PHP_EOL);
-                }
-            }
-            if ($this->madeline->getAuthorization() === API::WAITING_PASSWORD) {
-                $this->madeline->complete2faLogin(Tools::readLine('Two-step verification password: ', hidden: true));
-            }
-            if ($this->madeline->getAuthorization() !== API::LOGGED_IN) {
-                throw new RuntimeException('Telegram login was not completed.');
-            }
-            $this->madeline->start();
+            $login->run();
+            $madeline->start();
         } catch (Throwable $e) {
             throw new RuntimeException('Failed to start Madeline: ' . $e->getMessage(), 0, $e);
         }

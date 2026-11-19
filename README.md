@@ -41,18 +41,35 @@ To use Telegram Downloader, follow these steps:
 
 1. Configure your Telegram API credentials in a `.env` file. Create it in the root project and add the necessary 
    environment variables (Check the .env.dev as an example).
-2. Run the following command:
+2. Run the command with the chat to download from (or set `TELEGRAM_CHANNEL` in `.env`):
    ```
-   php bin/console telegram:download:media
+   php bin/console tdm @my_channel
    ```
-   or 
-
-   ```
-   php bin/console tdm
-   ````
+   (`tdm` is short for `telegram:download:media`; the chat can be `@username`, a `t.me` link or an ID.)
 3. On first run, a QR code is printed in the terminal. Scan it from Telegram on your phone
    (**Settings → Devices → Link Desktop Device**), then enter your two-step verification
-   password if asked. Phone-number and bot-token logins are not offered.
+   password if asked (3 attempts). Phone-number and bot-token logins are not offered.
+   The login is saved in `session.madeline` at the project root, so later runs reuse it from any
+   working directory. Treat that folder as a secret. Press Ctrl+C to cancel the login.
+4. Every photo and file (videos, audio, voice notes, GIFs, documents) is downloaded, newest first,
+   into `downloads/<chat>/`. Each file shows a progress bar; add `-v` to also list files that are
+   already downloaded. The run ends with a summary and exits with an error code if any file failed.
+
+Options:
+
+| Option | Effect |
+|---|---|
+| `-t, --type=photo\|video\|audio\|document` | Only this media type (`document` = any file, including videos and audio sent as files) |
+| `-o, --output=DIR` | Download directory (relative to the current directory) |
+| `-l, --limit=N` | Stop after N files, newest first |
+| `-s, --since=DATE` | Only messages from this date, e.g. `2024-01-31` or `"7 days ago"` |
+| `--rescan` | Scan the whole history again, e.g. after deleting files you want back |
+
+Progress is saved in the download directory (`.telegram-downloader*.json`, one file per `--type`).
+The next run only scans messages posted since, resumes an interrupted run where it stopped, and
+retries files that failed. Files already complete on disk are skipped and partial files resume, so
+it is safe to stop the command with Ctrl+C. After a run limited by `--limit` or `--since`, a run
+without them continues with the older messages.
 
 #### Note
 
