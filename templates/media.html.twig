@@ -13,14 +13,14 @@
     {% else %}
         <h2>Media in {{ chat }}</h2>
         {% if rows is empty %}
-            <p class="muted">No media found.</p>
+            <p class="muted">{{ olderUrl ? 'No photos or files in these messages.' : 'No photos or files found.' }}</p>
+            {% if olderUrl %}<p><a href="{{ olderUrl }}">Older messages</a></p>{% endif %}
         {% else %}
             <table class="media-table">
-                <thead><tr><th scope="col">ID</th><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Name</th><th scope="col">Size</th><th scope="col">Action</th></tr></thead>
+                <thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Name</th><th scope="col">Size</th><th scope="col">Action</th></tr></thead>
                 <tbody>
                 {% for row in rows %}
                     <tr>
-                        <td data-label="ID">{{ row.id }}</td>
                         <td data-label="Date">{{ row.date }}</td>
                         <td data-label="Type">{{ row.type }}</td>
                         <td data-label="Name">{{ row.name }}</td>

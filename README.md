@@ -82,7 +82,15 @@ The lightweight web UI runs on [Slim v4](https://www.slimframework.com/) with [T
 Run the built-in server with the Slim front controller:
 
 ```bash
-php -S localhost:8000 -t public public/index.php
+composer serve
+```
+
+This runs `php -S localhost:8000 -t public public/index.php` with `PHP_CLI_SERVER_WORKERS=4`.
+The built-in server otherwise handles one request at a time, so a long download would block
+every other page until it finishes. To start it by hand on another port:
+
+```bash
+PHP_CLI_SERVER_WORKERS=4 php -S localhost:8888 -t public public/index.php
 ```
 
 Visit `http://localhost:8000` and log in by QR code: open Telegram on your phone, go to

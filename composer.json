@@ -34,6 +34,14 @@
         "phpstan/phpstan": "^2.1"
     },
     "scripts": {
-        "stan" : "php vendor/bin/phpstan analyse src --level 7 --memory-limit=-1"
+        "stan" : "php vendor/bin/phpstan analyse src --level 7 --memory-limit=-1",
+        "serve" : [
+            "Composer\\Config::disableProcessTimeout",
+            "@putenv PHP_CLI_SERVER_WORKERS=4",
+            "php -S localhost:8888 -t public public/index.php"
+        ]
+    },
+    "scripts-descriptions": {
+        "serve" : "Run the web interface on http://localhost:8888 with 4 workers, so a download does not block other pages."
     }
 }

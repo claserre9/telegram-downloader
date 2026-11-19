@@ -151,8 +151,9 @@ class WebTelegramClient extends TelegramClient
         }
         $this->ensureStarted();
 
-        // Resolve peer for reliability on private/supergroup IDs.
-        $madeline->getPwrChat($chat);
+        // Resolve the peer from MadelineProto's local cache. getPwrChat would also fetch the full
+        // member list and is rate-limited by Telegram (waits of 30 s after a few calls).
+        $madeline->getInfo($chat);
 
         $filter = MediaType::searchFilter($type);
         if ($filter !== null) {
@@ -220,22 +221,6 @@ class WebTelegramClient extends TelegramClient
     }
 
     /**
-     * Filters a list of messages by media type.
-     *
-     * @param array<int, array<string, mixed>> $messages The list of messages.
-     * @param string $type The media type filter (photo, video, document, audio).
-     * @return array<int, array<string, mixed>> The filtered list of messages.
-     */
-    public function filterMedia(array $messages, string $type): array
-    {
-        if ($type === '') {
-            return $messages;
-        }
-
-        return array_values(array_filter($messages, static fn (array $message): bool => MediaType::matches($message, $type)));
-    }
-
-    /**
      * Formats a byte size into a human-readable string.
      *
      * @param int $bytes The number of bytes.
@@ -273,10 +258,10 @@ class WebTelegramClient extends TelegramClient
         }
         $this->ensureStarted();
         
-        $chatInfo = $madeline->getPwrChat($chat);
+        $chatInfo = $madeline->getInfo($chat);
         $message = null;
         
-        if (isset($chatInfo['type']) && ($chatInfo['type'] === 'channel' || $chatInfo['type'] === 'supergroup')) {
+        if (in_array($chatInfo['type'], ['channel', 'supergroup'], true)) {
             /** @var array{messages: array<int, array<string, mixed>>} $res */
             $res = $madeline->channels->getMessages([
                 'channel' => $chat,
@@ -319,119 +304,5 @@ class WebTelegramClient extends TelegramClient
 
         // An octet-stream MIME type makes MadelineProto use Content-Disposition: attachment.
         $madeline->downloadToBrowser($message, null, $size, $name, 'application/octet-stream');
-    }
-
-    /**
-     * Build a download link for a specific message using a provided download script URL.
-     *
-     * @param string $chat The chat ID, username, or phone number.
-     * @param int $messageId The ID of the message containing the media.
-     * @param string $scriptUrl The URL of the script that will handle the download.
-     * @return string The generated download link.
-     * @throws RuntimeException If Madeline is not initialized or if the message has no media.
-     * @throws Throwable If the link cannot be generated.
-     */
-    public function getDownloadLink(string $chat, int $messageId, string $scriptUrl): string
-    {
-        $madeline = $this->getMadeline();
-        if (!$madeline) {
-            throw new RuntimeException('Madeline not initialized');
-        }
-        $this->ensureStarted();
-        
-        $chatInfo = $madeline->getPwrChat($chat);
-        $message = null;
-        
-        if (isset($chatInfo['type']) && ($chatInfo['type'] === 'channel' || $chatInfo['type'] === 'supergroup')) {
-            /** @var array{messages: array<int, array<string, mixed>>} $res */
-            $res = $madeline->channels->getMessages([
-                'channel' => $chat,
-                'id' => [$messageId],
-            ]);
-        } else {
-            /** @var array{messages: array<int, array<string, mixed>>} $res */
-            /** @phpstan-ignore-next-line */
-            $res = $madeline->messages->getMessages([
-                'id' => [$messageId],
-            ]);
-        }
-
-        foreach ($res['messages'] as $msg) {
-            if (($msg['_'] ?? '') !== 'messageEmpty' && isset($msg['media'])) {
-                $message = $msg;
-                break;
-            }
-        }
-
-        if (!$message) {
-            throw new RuntimeException('Message has no media payload');
-        }
-
-        return $madeline->getDownloadLink($message, $scriptUrl);
-    }
-
-    /**
-     * Download the media of a specific message to a directory.
-     *
-     * @param string $chat The chat ID, username, or phone number.
-     * @param int $messageId The ID of the message containing the media.
-     * @param string|null $downloadDir The directory where the file should be saved.
-     * @return string The path to the downloaded file.
-     * @throws \InvalidArgumentException If inputs are invalid.
-     * @throws RuntimeException If Madeline is not initialized, message has no media, or download fails.
-     */
-    public function downloadMedia(string $chat, int $messageId, ?string $downloadDir = null): string
-    {
-        $chat = trim($chat);
-        if (empty($chat)) {
-            throw new \InvalidArgumentException('Chat identifier cannot be empty.');
-        }
-        if ($messageId <= 0) {
-            throw new \InvalidArgumentException('Invalid message ID.');
-        }
-
-        $madeline = $this->getMadeline();
-        if (!$madeline) {
-            throw new RuntimeException('Madeline not initialized');
-        }
-        $this->ensureStarted();
-        
-        $chatInfo = $madeline->getPwrChat($chat);
-        $message = null;
-        
-        if (isset($chatInfo['type']) && ($chatInfo['type'] === 'channel' || $chatInfo['type'] === 'supergroup')) {
-            /** @var array{messages: array<int, array<string, mixed>>} $res */
-            $res = $madeline->channels->getMessages([
-                'channel' => $chat,
-                'id' => [$messageId],
-            ]);
-        } else {
-            /** @var array{messages: array<int, array<string, mixed>>} $res */
-            /** @phpstan-ignore-next-line */
-            $res = $madeline->messages->getMessages([
-                'id' => [$messageId],
-            ]);
-        }
-
-        foreach ($res['messages'] as $msg) {
-            if (($msg['_'] ?? '') !== 'messageEmpty' && isset($msg['media'])) {
-                $message = $msg;
-                break;
-            }
-        }
-
-        if (!$message) {
-            throw new RuntimeException('Message has no media payload');
-        }
-
-        if ($downloadDir === null) {
-            $downloadDir = sys_get_temp_dir();
-        }
-
-        try {
-            return (string)$madeline->downloadToDir($message, $downloadDir);
-        } catch (Throwable $e) {
-            throw new RuntimeException('Download failed: ' . $e->getMessage());
-        }
     }
 }

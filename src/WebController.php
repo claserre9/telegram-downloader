@@ -169,14 +169,14 @@ final class WebController
         if ($chat !== '') {
             try {
                 $client = ($this->clientFactory)();
-                $messages = $client->getMedia($chat, $type, $offsetId, 20);
-                $messages = $client->filterMedia($messages, $type);
-                usort($messages, static fn(array $a, array $b) => ($b['id'] ?? 0) <=> ($a['id'] ?? 0));
-                if ($messages !== []) {
-                    $ids = array_map(static fn(array $message) => $message['id'] ?? 0, $messages);
-                    $minId = (int) min($ids);
-                    $nextOffset = $minId > 1 ? $minId - 1 : 0;
-                }
+                // Only photos and documents are listed: text, link previews and polls have nothing to download.
+                $page = MediaPage::collect(
+                    static fn (int $offset, int $limit): array => $client->getMedia($chat, $type, $offset, $limit),
+                    in_array($type, MediaType::FILTERS, true) ? $type : '',
+                    max(0, $offsetId),
+                );
+                $messages = $page['messages'];
+                $nextOffset = $page['nextOffset'];
             } catch (\Throwable $e) {
                 $error = 'Error fetching media: ' . $e->getMessage();
             }

@@ -411,8 +411,13 @@ try {
     $assert(!str_contains($mediaBody, '<video & clip>.mp4'), 'Media filenames should not be rendered as markup.');
     $assert(str_contains($mediaBody, 'data-label="Type">video</td>'), 'Document MIME types should still be presented as videos.');
     $assert(str_contains($mediaBody, 'href="/download?chat=%40sample%26channel&amp;id=707"'), 'Media download links should encode chat identifiers.');
-    $assert(str_contains($mediaBody, 'href="/media?chat=%40sample%26channel&amp;type=video&amp;offset=706"'), 'Older-media links should preserve their query parameters.');
+    $assert(!str_contains($mediaBody, 'Older messages'), 'No older-media link should be shown once the history is exhausted.');
     $assert(!str_contains($mediaBody, 'photo_706.jpg'), 'The media type filter should exclude photos from a video listing.');
+
+    [$allMediaStatus, $allMediaBody] = $homeRequest($presentationSession, '/media?chat=%40sample%26channel');
+    $assert(str_contains($allMediaStatus, '200') && str_contains($allMediaBody, 'photo_706.jpg') && str_contains($allMediaBody, 'id=707'), 'The unfiltered list should show photos and files.');
+    $assert(!str_contains($allMediaBody, 'id=705') && !str_contains($allMediaBody, 'id=704') && !str_contains($allMediaBody, 'WebPage'), 'Text messages and link previews should not be listed.');
+    $assert(substr_count($allMediaBody, 'data-label="Type">') === 2, 'Only the two downloadable messages should be listed.');
 
     [$noChatStatus, $noChatBody] = $homeRequest($presentationSession, '/media');
     $assert(str_contains($noChatStatus, '200') && str_contains($noChatBody, 'No chat selected.'), 'The media template should handle a missing chat selection.');

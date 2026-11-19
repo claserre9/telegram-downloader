@@ -15,14 +15,14 @@
             <p class="error" role="alert">{{ error }}</p>
         {% endif %}
         <form method="get" action="/" class="directory-search">
-            <label>Search conversations<input type="search" name="q" value="{{ query }}" placeholder="Name, username or ID"></label>
+            <label>Search conversations<input type="search" name="q" value="{{ query }}" placeholder="Name or username"></label>
             <button type="submit">Search</button>
         </form>
         <div class="directory-actions">
             {% if query %}
                 <a href="/">Clear search</a>
             {% else %}
-                <span class="muted">Search by name, username or ID</span>
+                <span class="muted">Search by name or username</span>
             {% endif %}
             <a class="text-link" href="{{ refreshUrl }}">Refresh list</a>
         </div>
@@ -31,7 +31,7 @@
             {% if query %}
                 <div class="empty-state">
                     <h3>No matching conversations</h3>
-                    <p class="muted">Try a different name, username or ID.</p>
+                    <p class="muted">Try a different name or username.</p>
                     <a href="/">Clear search</a>
                 </div>
             {% else %}
@@ -43,7 +43,7 @@
         {% elseif directory.total > 0 %}
             <p class="directory-summary"><span><strong>{{ directory.total }}</strong> {{ directory.total == 1 ? 'conversation' : 'conversations' }}</span><span class="muted">Page {{ directory.page }} of {{ directory.pages }}</span></p>
             <table class="directory-table">
-                <thead><tr><th scope="col">Conversation</th><th scope="col">Type</th><th scope="col">ID</th><th scope="col">Action</th></tr></thead>
+                <thead><tr><th scope="col">Conversation</th><th scope="col">Type</th><th scope="col">Action</th></tr></thead>
                 <tbody>
                 {% for dialog in directory.items %}
                     <tr>
@@ -54,7 +54,6 @@
                             {% endif %}
                         </td>
                         <td data-label="Type">{{ dialog.type }}</td>
-                        <td data-label="ID">{{ dialog.id }}</td>
                         <td data-label="Action"><a class="browse-link" href="{{ dialog.mediaUrl }}">Browse media <span aria-hidden="true">→</span></a></td>
                     </tr>
                 {% endfor %}

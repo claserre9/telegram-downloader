@@ -26,6 +26,10 @@ class SimulatedDialogDirectoryWebTelegramClient extends WebTelegramClient
 
     public function getMedia(string $chat, string $type = '', int $offsetId = 0, int $limit = 20): array
     {
+        if ($offsetId > 0) {
+            return [];
+        }
+
         return [
             [
                 'id' => 707,
@@ -40,6 +44,12 @@ class SimulatedDialogDirectoryWebTelegramClient extends WebTelegramClient
                         ],
                     ],
                 ],
+            ],
+            ['id' => 705, 'date' => 1700000002, 'message' => 'Plain text message'],
+            [
+                'id' => 704,
+                'date' => 1700000003,
+                'media' => ['_' => 'messageMediaWebPage', 'webpage' => ['url' => 'https://example.com']],
             ],
             [
                 'id' => 706,
