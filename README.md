@@ -20,8 +20,65 @@ Before you begin, ensure you have met the following requirements:
 - You have a Telegram account with API access.
 - You have access to the Telegram channel(s) from which you wish to download media.
 
+## Quick Start with Docker
+The easiest way to run Telegram Downloader on your own computer: you only need
+[Docker](https://docs.docker.com/get-docker/) with Docker Compose (included in Docker Desktop on
+Windows and macOS). PHP and Composer are not required.
+
+1. **Create your own Telegram API credentials.** Sign in at https://my.telegram.org, open
+   **API development tools** and create an application (any name and short name). Keep the
+   `api_id` and `api_hash` it shows. Each person running the app uses their own credentials:
+   do not share yours, and do not use someone else's.
+2. **Get the code and configure it:**
+   ```bash
+   git clone https://github.com/claserre9/telegram-downloader.git
+   cd telegram-downloader
+   cp .env.dev .env
+   ```
+   Edit `.env`, uncomment `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` and set your values.
+3. **Start the web interface:**
+   ```bash
+   docker compose up -d --build
+   ```
+   Open http://localhost:8080 and scan the QR code from the Telegram app on your phone
+   (**Settings → Devices → Link Desktop Device**). The first start takes a few minutes while
+   the image is built.
+4. **Or use the command line** (the QR code is shown in the terminal on the first run):
+   ```bash
+   docker compose run --rm telegram-downloader php bin/console tdm @channel_name
+   ```
+   Files are saved in `downloads/<chat>` next to `docker-compose.yml`. The
+   [command options](#options) work the same way; with `--output`, use a folder inside
+   `downloads/` (for example `-o downloads/videos`) so the files land on your computer.
+
+Your Telegram sessions are kept in `sessions/` and your files in `downloads/`, on your computer,
+so stopping, updating or rebuilding the container does not log you out.
+
+| Task | Command |
+|---|---|
+| Stop | `docker compose down` |
+| Update to the latest version | `git pull && docker compose up -d --build` |
+| See the logs | `docker compose logs -f` |
+
+Optional settings, also in `.env`:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `WEB_PORT` | `8080` | Port of the web interface on your computer. |
+| `DOCKER_UID`, `DOCKER_GID` | `1000` | Linux only: set them to the output of `id -u` and `id -g` if they differ, then rebuild, so files in `sessions/` and `downloads/` belong to you. |
+
+**Security.** A file in `sessions/` gives full access to the Telegram account that logged in
+with it. The web interface is therefore only reachable from your own computer (`127.0.0.1`):
+do not publish the port on a network or the Internet, and do not share the `sessions/` folder.
+To end a session, use **Logout** in the web interface, or delete `sessions/cli.session` for the
+command line, and terminate it in Telegram under **Settings → Devices**.
+
+**Troubleshooting.** When you cancel the command with Ctrl+C in Docker, MadelineProto may print
+a stack trace after `Login cancelled.` or `Download interrupted.`: it is harmless, and the next
+run resumes normally.
+
 ## Installation
-To install Telegram Downloader, follow these steps:
+To install Telegram Downloader without Docker (PHP 8.4 or later and Composer required), follow these steps:
 
 1. Clone the repository:
    ```
@@ -50,12 +107,13 @@ To use Telegram Downloader, follow these steps:
    (**Settings → Devices → Link Desktop Device**), then enter your two-step verification
    password if asked (3 attempts). Phone-number and bot-token logins are not offered.
    The login is saved in `session.madeline` at the project root, so later runs reuse it from any
-   working directory. Treat that folder as a secret. Press Ctrl+C to cancel the login.
+   working directory (set `TELEGRAM_CLI_SESSION` in `.env` to keep it elsewhere; the Docker image
+   uses `sessions/cli.session`). Treat that folder as a secret. Press Ctrl+C to cancel the login.
 4. Every photo and file (videos, audio, voice notes, GIFs, documents) is downloaded, newest first,
    into `downloads/<chat>/`. Each file shows a progress bar; add `-v` to also list files that are
    already downloaded. The run ends with a summary and exits with an error code if any file failed.
 
-Options:
+### Options
 
 | Option | Effect |
 |---|---|

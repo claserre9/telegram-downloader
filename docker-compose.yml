@@ -1,0 +1,19 @@
+services:
+  telegram-downloader:
+    build:
+      context: .
+      args:
+        UID: ${DOCKER_UID:-1000}
+        GID: ${DOCKER_GID:-1000}
+    image: telegram-downloader
+    # TELEGRAM_API_ID and TELEGRAM_API_HASH (see .env.dev).
+    env_file: .env
+    ports:
+      # Only reachable from this computer. Sessions give full access to Telegram accounts:
+      # do not expose this port to a network.
+      - "127.0.0.1:${WEB_PORT:-8080}:8080"
+    volumes:
+      # Telegram sessions (web and command line) and downloaded files stay on the host.
+      - ./sessions:/app/sessions
+      - ./downloads:/app/downloads
+    restart: unless-stopped

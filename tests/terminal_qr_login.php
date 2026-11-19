@@ -146,4 +146,23 @@ try {
 }
 $assert(DownloadMediaCommand::sessionPath() === $expectedSession, 'The CLI session path should be stable.');
 
+// TELEGRAM_CLI_SESSION moves it, e.g. into the sessions/ volume in Docker; relative paths start at the project root.
+$previousSetting = $_ENV['TELEGRAM_CLI_SESSION'] ?? null;
+try {
+    $_ENV['TELEGRAM_CLI_SESSION'] = 'sessions/cli.session';
+    chdir(sys_get_temp_dir());
+    $assert(DownloadMediaCommand::sessionPath() === dirname(__DIR__) . '/sessions/cli.session', 'A relative TELEGRAM_CLI_SESSION should be relative to the project root.');
+    $_ENV['TELEGRAM_CLI_SESSION'] = '/data/telegram/cli.session';
+    $assert(DownloadMediaCommand::sessionPath() === '/data/telegram/cli.session', 'An absolute TELEGRAM_CLI_SESSION should be used as is.');
+    $_ENV['TELEGRAM_CLI_SESSION'] = '  ';
+    $assert(DownloadMediaCommand::sessionPath() === $expectedSession, 'An empty TELEGRAM_CLI_SESSION should keep the default.');
+} finally {
+    chdir((string) $previousDirectory);
+    if ($previousSetting === null) {
+        unset($_ENV['TELEGRAM_CLI_SESSION']);
+    } else {
+        $_ENV['TELEGRAM_CLI_SESSION'] = $previousSetting;
+    }
+}
+
 fwrite(STDOUT, "Terminal QR login tests passed.\n");

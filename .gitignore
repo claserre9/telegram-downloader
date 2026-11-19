@@ -2,10 +2,11 @@
 /.idea/
 .env
 /session.madeline/
-/downloads/
+/downloads/*
+!/downloads/.gitkeep
 /sessions/
 !/sessions/.gitkeep
 /*.log
-/public/MadelineProto.log
+MadelineProto.log
 .aider*
 /.junie/guidelines.md

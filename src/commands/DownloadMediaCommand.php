@@ -19,6 +19,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Path;
 use Throwable;
 
 #[AsCommand(
@@ -54,10 +55,17 @@ class DownloadMediaCommand extends Command
     }
 
     /**
-     * The command's MadelineProto session, at the project root regardless of the working directory.
+     * The command's MadelineProto session: session.madeline at the project root, or TELEGRAM_CLI_SESSION
+     * (relative to the project root) when set, e.g. to keep it in a Docker volume. Never depends on the
+     * working directory.
      */
     public static function sessionPath(): string
     {
+        $configured = $_ENV['TELEGRAM_CLI_SESSION'] ?? getenv('TELEGRAM_CLI_SESSION');
+        if (is_string($configured) && trim($configured) !== '') {
+            return Path::makeAbsolute(trim($configured), self::projectRoot());
+        }
+
         return self::projectRoot() . DIRECTORY_SEPARATOR . 'session.madeline';
     }
 

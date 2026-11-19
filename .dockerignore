@@ -1,0 +1,18 @@
+# Secrets and per-user data: never copied into the image (sessions/ and downloads/ are volumes).
+.env
+sessions/
+session.madeline/
+downloads/
+*.log
+MadelineProto.log
+
+# Rebuilt in the image or not needed to run it.
+.git/
+vendor/
+tests/
+.idea/
+.junie/
+.aider*
+docker-compose.yml
+Dockerfile
+.dockerignore
