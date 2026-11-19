@@ -24,6 +24,16 @@ class SimulatedDialogDirectoryWebTelegramClient extends WebTelegramClient
         ];
     }
 
+    /** A minimal JPEG for message 707, nothing for 706, and a Telegram error for other messages. */
+    public function thumbnail(string $chat, int $messageId): ?string
+    {
+        return match ($messageId) {
+            707 => "\xFF\xD8\xFF\xE0" . str_repeat("\0", 16) . "\xFF\xD9",
+            706 => null,
+            default => throw new RuntimeException('Simulated thumbnail failure.'),
+        };
+    }
+
     public function getMedia(string $chat, string $type = '', int $offsetId = 0, int $limit = 20): array
     {
         if ($offsetId > 0) {
@@ -39,6 +49,10 @@ class SimulatedDialogDirectoryWebTelegramClient extends WebTelegramClient
                     'document' => [
                         'mime_type' => 'video/mp4',
                         'size' => 1048576,
+                        'thumbs' => [
+                            ['_' => 'photoStrippedSize', 'type' => 'i', 'bytes' => "\x01\x28\x1e" . 'preview'],
+                            ['_' => 'photoSize', 'type' => 'm', 'w' => 320, 'h' => 240, 'size' => 4],
+                        ],
                         'attributes' => [
                             ['_' => 'documentAttributeFilename', 'file_name' => '<video & clip>.mp4'],
                         ],

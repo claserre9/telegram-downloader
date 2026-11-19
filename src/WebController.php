@@ -214,8 +214,17 @@ final class WebController
                     }
                 }
 
+                $thumbnailUrl = MediaThumbnail::pick($message) === null ? null : '/thumbnail?' . http_build_query(
+                    ['chat' => $chat, 'id' => $messageId],
+                    '',
+                    '&',
+                    PHP_QUERY_RFC3986
+                );
+
                 $rows[] = [
                     'id' => $messageId,
+                    'thumbnailUrl' => $thumbnailUrl,
+                    'placeholder' => MediaThumbnail::placeholder($message),
                     'date' => $date,
                     'type' => $typeDisplay,
                     'name' => $fileName,
@@ -246,6 +255,45 @@ final class WebController
             'rows' => $rows,
             'olderUrl' => $olderUrl,
         ]);
+    }
+
+    public function thumbnail(Request $request, Response $response): Response
+    {
+        if (!$this->isLoggedIn()) {
+            return $response->withStatus(401);
+        }
+        // A page loads many thumbnails at once: release the session so they are not serialized.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        $params = $request->getQueryParams();
+        $chat = $params['chat'] ?? null;
+        $id = isset($params['id']) ? (int) $params['id'] : 0;
+        if (!is_string($chat) || trim($chat) === '' || $id <= 0) {
+            return $response->withStatus(400);
+        }
+
+        try {
+            $image = ($this->clientFactory)()->thumbnail($chat, $id);
+        } catch (\Throwable $e) {
+            error_log("Thumbnail of message $id in $chat failed: " . $e->getMessage());
+            return $response->withStatus(404);
+        }
+        if ($image === null) {
+            return $response->withStatus(404);
+        }
+
+        // Thumbnails are JPEG, or WebP for images sent as files.
+        $type = (new \finfo(FILEINFO_MIME_TYPE))->buffer($image);
+        $type = in_array($type, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true) ? $type : 'image/jpeg';
+        $response->getBody()->write($image);
+
+        return $response
+            ->withHeader('Content-Type', $type)
+            ->withHeader('Content-Length', (string) strlen($image))
+            ->withHeader('Cache-Control', 'private, max-age=604800')
+            ->withHeader('X-Content-Type-Options', 'nosniff');
     }
 
     public function download(Request $request, Response $response): Response

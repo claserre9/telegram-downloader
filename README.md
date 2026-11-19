@@ -112,8 +112,12 @@ Telegram session is still authorized. Logging out revokes the Telegram authoriza
 session's worker, deletes its files and clears the cookie. Existing PHP sessions that were
 already logged in before per-browser sessions continue to use `sessions/web.session`.
 Treat all files in `sessions/` as secrets and do not share or expose them.
-Use the manual chat field if a conversation is not listed. Then browse media by chat/channel,
-filter by type, paginate, and download files. Downloads
+Use the manual chat field if a conversation is not listed; public channels and groups can be
+opened by `@username` without joining them. Then browse media by chat/channel,
+filter by type, paginate, and download files. The media list shows only photos and files
+(text messages and link previews are skipped), each with its Telegram thumbnail: a blurred
+preview embedded in the message appears at once, then the 320 px thumbnail loads on demand
+and is cached by the browser. Audio and plain files show a type icon instead. Downloads
 are streamed from Telegram to the browser as chunks, so they can begin before the complete
 media file has been saved on the server. The transfer speed still depends on Telegram and
 the connection. PHP output buffering or a reverse proxy may need to be disabled/configured

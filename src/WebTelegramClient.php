@@ -256,35 +256,7 @@ class WebTelegramClient extends TelegramClient
         if (!$madeline) {
             throw new RuntimeException('Madeline not initialized');
         }
-        $this->ensureStarted();
-        
-        $chatInfo = $madeline->getInfo($chat);
-        $message = null;
-        
-        if (in_array($chatInfo['type'], ['channel', 'supergroup'], true)) {
-            /** @var array{messages: array<int, array<string, mixed>>} $res */
-            $res = $madeline->channels->getMessages([
-                'channel' => $chat,
-                'id' => [$messageId],
-            ]);
-        } else {
-            /** @var array{messages: array<int, array<string, mixed>>} $res */
-            /** @phpstan-ignore-next-line */
-            $res = $madeline->messages->getMessages([
-                'id' => [$messageId],
-            ]);
-        }
-
-        foreach ($res['messages'] as $msg) {
-            if (($msg['_'] ?? '') !== 'messageEmpty' && isset($msg['media'])) {
-                $message = $msg;
-                break;
-            }
-        }
-
-        if (!$message) {
-            throw new RuntimeException('Message has no media payload');
-        }
+        $message = $this->findMediaMessage($chat, $messageId);
 
         $name = null;
         $size = null;
@@ -304,5 +276,82 @@ class WebTelegramClient extends TelegramClient
 
         // An octet-stream MIME type makes MadelineProto use Content-Disposition: attachment.
         $madeline->downloadToBrowser($message, null, $size, $name, 'application/octet-stream');
+    }
+
+    /**
+     * The JPEG thumbnail of a message's media, or null if Telegram has none (audio, most files).
+     *
+     * @throws \InvalidArgumentException If inputs are invalid.
+     * @throws RuntimeException If Madeline is not initialized or the message has no media.
+     * @throws Throwable If the download fails.
+     */
+    public function thumbnail(string $chat, int $messageId): ?string
+    {
+        $chat = trim($chat);
+        if ($chat === '' || $messageId <= 0) {
+            throw new \InvalidArgumentException('Invalid chat or message ID.');
+        }
+        $madeline = $this->getMadeline();
+        if (!$madeline) {
+            throw new RuntimeException('Madeline not initialized');
+        }
+
+        $message = $this->findMediaMessage($chat, $messageId);
+        $thumbnail = MediaThumbnail::pick($message);
+        if ($thumbnail === null) {
+            return null;
+        }
+
+        $file = tempnam(sys_get_temp_dir(), 'tg-thumb-');
+        if ($file === false) {
+            throw new RuntimeException('Cannot create a temporary file for the thumbnail.');
+        }
+        try {
+            $madeline->downloadToFile(MediaThumbnail::downloadInfo($madeline->getDownloadInfo($message), $thumbnail), $file);
+            $jpeg = file_get_contents($file);
+        } finally {
+            @unlink($file);
+        }
+
+        return $jpeg === false || $jpeg === '' ? null : $jpeg;
+    }
+
+    /**
+     * Fetch one message of a chat and check that it carries media.
+     *
+     * @return array<string, mixed>
+     * @throws RuntimeException If Madeline is not initialized or the message has no media.
+     */
+    private function findMediaMessage(string $chat, int $messageId): array
+    {
+        $madeline = $this->getMadeline();
+        if (!$madeline) {
+            throw new RuntimeException('Madeline not initialized');
+        }
+        $this->ensureStarted();
+
+        // getInfo reads the local peer cache; channel messages are numbered per channel.
+        $chatInfo = $madeline->getInfo($chat);
+        if (in_array($chatInfo['type'], ['channel', 'supergroup'], true)) {
+            /** @var array{messages: array<int, array<string, mixed>>} $res */
+            $res = $madeline->channels->getMessages([
+                'channel' => $chat,
+                'id' => [$messageId],
+            ]);
+        } else {
+            /** @var array{messages: array<int, array<string, mixed>>} $res */
+            /** @phpstan-ignore-next-line */
+            $res = $madeline->messages->getMessages([
+                'id' => [$messageId],
+            ]);
+        }
+
+        foreach ($res['messages'] as $msg) {
+            if (($msg['_'] ?? '') !== 'messageEmpty' && isset($msg['media'])) {
+                return $msg;
+            }
+        }
+
+        throw new RuntimeException('Message has no media payload');
     }
 }

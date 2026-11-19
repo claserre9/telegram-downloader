@@ -17,10 +17,17 @@
             {% if olderUrl %}<p><a href="{{ olderUrl }}">Older messages</a></p>{% endif %}
         {% else %}
             <table class="media-table">
-                <thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Name</th><th scope="col">Size</th><th scope="col">Action</th></tr></thead>
+                <thead><tr><th scope="col" class="media-preview-col">Preview</th><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Name</th><th scope="col">Size</th><th scope="col">Action</th></tr></thead>
                 <tbody>
                 {% for row in rows %}
                     <tr>
+                        <td data-label="Preview" class="media-preview">
+                            {% if row.thumbnailUrl %}
+                                <a href="{{ row.downloadUrl }}" tabindex="-1"><img class="media-thumb" src="{{ row.thumbnailUrl }}" alt="" width="96" height="72" loading="lazy" decoding="async"{% if row.placeholder %} style="background-image: url('{{ row.placeholder }}')"{% endif %}></a>
+                            {% else %}
+                                <span class="media-thumb media-thumb-icon media-thumb-{{ row.type }}" aria-hidden="true">{{ {'audio': '♪', 'video': '▶', 'photo': '🖼'}[row.type] ?? '📄' }}</span>
+                            {% endif %}
+                        </td>
                         <td data-label="Date">{{ row.date }}</td>
                         <td data-label="Type">{{ row.type }}</td>
                         <td data-label="Name">{{ row.name }}</td>

@@ -91,6 +91,7 @@ $app->get('/', [$controller, 'home']);
 $app->map(['GET', 'POST'], '/login', [$controller, 'login']);
 $app->get('/logout', [$controller, 'logout']);
 $app->get('/media', [$controller, 'media']);
+$app->get('/thumbnail', [$controller, 'thumbnail']);
 $app->get('/download', [$controller, 'download']);
 
 $request = ServerRequestCreatorFactory::create()->createServerRequestFromGlobals();

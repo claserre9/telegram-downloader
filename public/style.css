@@ -147,6 +147,26 @@ button:hover {
     max-width: 100%;
 }
 
+.media-preview-col {
+    width: 7.5rem;
+}
+
+.media-thumb {
+    display: block;
+    width: 96px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: 0.35rem;
+    background: #eef0f1 center / cover no-repeat;
+}
+
+.media-thumb-icon {
+    display: grid;
+    place-items: center;
+    color: #59636d;
+    font-size: 1.6rem;
+}
+
 .directory-search {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

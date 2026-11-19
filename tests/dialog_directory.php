@@ -419,6 +419,36 @@ try {
     $assert(!str_contains($allMediaBody, 'id=705') && !str_contains($allMediaBody, 'id=704') && !str_contains($allMediaBody, 'WebPage'), 'Text messages and link previews should not be listed.');
     $assert(substr_count($allMediaBody, 'data-label="Type">') === 2, 'Only the two downloadable messages should be listed.');
 
+    // Thumbnails: an image with a blurred placeholder when Telegram has one, an icon otherwise.
+    $assert(str_contains($allMediaBody, 'src="/thumbnail?chat=%40sample%26channel&amp;id=707"') && str_contains($allMediaBody, 'loading="lazy"'), 'Media with a thumbnail should show it lazily.');
+    $assert(str_contains($allMediaBody, "background-image: url('data:image/jpeg;base64,"), 'The embedded preview should be shown while the thumbnail loads.');
+    $assert(str_contains($allMediaBody, 'media-thumb-icon media-thumb-photo'), 'Media without a thumbnail should show a type icon.');
+    $thumbnailRequest = static function (string $sessionId, string $path) use ($port): array {
+        $context = stream_context_create(['http' => [
+            'header' => 'Cookie: ' . session_name() . '=' . $sessionId,
+            'ignore_errors' => true,
+            'timeout' => 5,
+        ]]);
+        $body = file_get_contents('http://127.0.0.1:' . $port . $path, false, $context);
+        $headers = [];
+        foreach (array_slice($http_response_header ?? [], 1) as $line) {
+            [$name, $value] = array_pad(explode(':', $line, 2), 2, '');
+            $headers[strtolower(trim($name))] = trim($value);
+        }
+        return [$http_response_header[0] ?? '', $headers, $body === false ? '' : $body];
+    };
+    [$thumbStatus, $thumbHeaders, $thumbBody] = $thumbnailRequest($presentationSession, '/thumbnail?chat=%40sample%26channel&id=707');
+    $assert(str_contains($thumbStatus, '200') && ($thumbHeaders['content-type'] ?? '') === 'image/jpeg' && str_starts_with($thumbBody, "\xFF\xD8"), 'The thumbnail route should return the JPEG.');
+    $assert(str_contains($thumbHeaders['cache-control'] ?? '', 'private') && str_contains($thumbHeaders['cache-control'] ?? '', 'max-age='), 'Thumbnails should be cached privately by the browser.');
+    [$noThumbStatus] = $thumbnailRequest($presentationSession, '/thumbnail?chat=%40sample%26channel&id=706');
+    [$failedThumbStatus] = $thumbnailRequest($presentationSession, '/thumbnail?chat=%40sample%26channel&id=999');
+    [$badThumbStatus] = $thumbnailRequest($presentationSession, '/thumbnail?chat=&id=707');
+    $assert(str_contains($noThumbStatus, '404') && str_contains($failedThumbStatus, '404') && str_contains($badThumbStatus, '400'), 'Missing thumbnails, Telegram errors and bad requests should not return an image.');
+    $anonymousSession = 'anonymous' . bin2hex(random_bytes(4));
+    $sessionIds[] = $anonymousSession;
+    [$anonymousThumbStatus] = $thumbnailRequest($anonymousSession, '/thumbnail?chat=%40sample%26channel&id=707');
+    $assert(str_contains($anonymousThumbStatus, '401'), 'Thumbnails should require a logged-in browser.');
+
     [$noChatStatus, $noChatBody] = $homeRequest($presentationSession, '/media');
     $assert(str_contains($noChatStatus, '200') && str_contains($noChatBody, 'No chat selected.'), 'The media template should handle a missing chat selection.');
 } finally {
