@@ -253,6 +253,28 @@ try {
         $sessionIds[] = $sessionIdFrom($restoredLoginCookie);
     }
 
+    // A restored session that cannot be checked right now is retried, never replaced by a new QR code.
+    $unreachable = sys_get_temp_dir() . '/simulated-telegram-unreachable-' . md5($browserAPath);
+    file_put_contents($unreachable, '1');
+    try {
+        [$downStatus, $downHeaders] = $request($port, '/', 'GET', [], $linkOnly);
+        $assert($downStatus === 302 && ($downHeaders['location'] ?? null) === '/login', 'An unverifiable restored session should wait on the login page.');
+        $downCookie = $cookieFrom($downHeaders);
+        $assert($downCookie !== null, 'The unverifiable restored browser should receive a PHP session.');
+        $sessionIds[] = $sessionIdFrom($downCookie);
+        [$waitStatus, , $waitBody] = $request($port, '/login', 'GET', [], $downCookie . '; ' . $linkOnly);
+        $assert($waitStatus === 200 && str_contains($waitBody, 'Reconnecting to your Telegram session'), 'The login page should say it is reconnecting.');
+        $assert(str_contains($waitBody, 'http-equiv="refresh"') && str_contains($waitBody, 'href="/logout"'), 'The reconnecting page should retry automatically and offer to start over.');
+        $assert(!str_contains($waitBody, 'qr-code'), 'No QR code should be shown while the restored session is being checked.');
+        $downSession = $readSession($sessionIdFrom($downCookie));
+        $assert(($downSession['telegram_session_restored'] ?? false) === true && !isset($downSession['simulated_qr_polls']), 'The restore should stay pending and no QR login should start.');
+    } finally {
+        @unlink($unreachable);
+    }
+    [$backStatus, $backHeaders] = $request($port, '/login', 'GET', [], $downCookie . '; ' . $linkOnly);
+    $assert($backStatus === 302 && ($backHeaders['location'] ?? null) === '/', 'Once reachable again, the restored session should log in without a new QR code.');
+    $assert(($readSession($sessionIdFrom($downCookie))['logged_in'] ?? false) === true, 'The retried restore should complete the login.');
+
     foreach (['tg_session=../web.session', 'tg_session=' . str_repeat('a', 64)] as $badLink) {
         [$badStatus, $badHeaders] = $request($port, '/', 'GET', [], $badLink);
         $assert($badStatus === 302 && ($badHeaders['location'] ?? null) === '/login', 'Invalid or unauthorized session cookies must not grant access.');

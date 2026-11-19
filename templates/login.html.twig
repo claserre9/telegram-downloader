@@ -1,7 +1,7 @@
 {% extends 'base.html.twig' %}
 
 {% block head %}
-    {% if step == 'qr' %}<meta http-equiv="refresh" content="5">{% endif %}
+    {% if step == 'qr' or step == 'reconnecting' %}<meta http-equiv="refresh" content="5">{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -19,6 +19,9 @@
             <button type="submit">Verify password</button>
         </form>
         <p class="muted"><a href="/logout">Cancel and start over</a></p>
+    {% elseif step == 'reconnecting' %}
+        <p role="status">Reconnecting to your Telegram session… this page retries automatically.</p>
+        <p class="muted">If it keeps failing, <a href="/logout">log out and sign in with a new QR code</a>.</p>
     {% elseif qrImage %}
         <p>Open Telegram on your phone, go to <strong>Settings → Devices → Link Desktop Device</strong>, then scan this code.</p>
         <img class="qr-code" src="{{ qrImage }}" width="320" height="320" alt="Telegram login QR code">

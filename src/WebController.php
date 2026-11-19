@@ -80,7 +80,13 @@ final class WebController
         }
 
         // QR code is the only login method; the password step follows a scan on accounts with 2FA.
-        $step = ($_SESSION['step'] ?? null) === 'password' ? 'password' : 'qr';
+        // A browser whose Telegram session could not be checked yet is never shown a QR code:
+        // the page retries the check instead, so a temporary failure does not ask for a new login.
+        $step = match (true) {
+            ($_SESSION['telegram_session_restored'] ?? false) === true => 'reconnecting',
+            ($_SESSION['step'] ?? null) === 'password' => 'password',
+            default => 'qr',
+        };
         $message = '';
 
         if ($step === 'password' && $request->getMethod() === 'POST') {
@@ -273,12 +279,15 @@ final class WebController
 
         // The PHP session expired but the browser cookie still names a Telegram session:
         // trust it only if that session is still authorized.
-        unset($_SESSION['telegram_session_restored']);
         try {
             $authorized = ($this->clientFactory)()->isAuthorized();
-        } catch (\Throwable) {
-            $authorized = false;
+        } catch (\Throwable $e) {
+            // The session's worker may be starting or Telegram unreachable: keep the restore
+            // pending so the next request checks again, instead of dropping a valid login.
+            error_log('Could not check the restored Telegram session: ' . $e->getMessage());
+            return false;
         }
+        unset($_SESSION['telegram_session_restored']);
         if ($authorized) {
             $this->completeLogin();
         }

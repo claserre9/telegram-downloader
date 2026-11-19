@@ -23,6 +23,18 @@ if (!class_exists(SimulatedWebTelegramClient::class, false)) {
             return sys_get_temp_dir() . '/simulated-telegram-logout-' . md5($sessionPath);
         }
 
+        public static function unreachableMarker(string $sessionPath): string
+        {
+            return sys_get_temp_dir() . '/simulated-telegram-unreachable-' . md5($sessionPath);
+        }
+
+        private function failIfUnreachable(): void
+        {
+            if (is_file(self::unreachableMarker($this->sessionPath))) {
+                throw new RuntimeException('The simulated Telegram session worker is not responding.');
+            }
+        }
+
         private function markAuthenticated(): void
         {
             $_SESSION['simulated_authenticated_path'] = $this->sessionPath;
@@ -31,6 +43,7 @@ if (!class_exists(SimulatedWebTelegramClient::class, false)) {
 
         public function isAuthorized(): bool
         {
+            $this->failIfUnreachable();
             return is_file(self::authMarker($this->sessionPath));
         }
 
@@ -56,6 +69,7 @@ if (!class_exists(SimulatedWebTelegramClient::class, false)) {
         {
             $_SESSION['simulated_telegram_session_path'] = $this->sessionPath;
             $_SESSION['simulated_qr_polls'] = (int) ($_SESSION['simulated_qr_polls'] ?? 0) + 1;
+            $this->failIfUnreachable();
             if ($_SESSION['simulated_qr_failure'] ?? false) {
                 throw new RuntimeException('Telegram refused the simulated QR login.');
             }
