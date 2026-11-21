@@ -19,11 +19,24 @@ final class MediaDownloader
 {
     public const BATCH_SIZE = 100;
 
+    /** Free space left on the disk after each file, so a full download never fills the disk (1 GiB). */
+    public const DISK_RESERVE = 1024 ** 3;
+
+    /**
+     * Set when the run stopped because the disk lacked space for a file.
+     *
+     * @var array{id: int, name: string, needed: int, available: int}|null
+     */
+    private ?array $diskFull = null;
+
     /** Matching files seen during the current run, for --limit. */
     private int $matched = 0;
 
     /** Whether the current run reached a message older than --since. */
     private bool $sinceReached = false;
+
+    /** @var Closure(string): (float|false) */
+    private readonly Closure $freeSpace;
 
     /**
      * @param Closure(int, int, int): list<array<string, mixed>> $fetchHistory Messages with minId < id < offsetId
@@ -33,6 +46,8 @@ final class MediaDownloader
      * @param string $type Media type filter (see MediaType::FILTERS), '' for every downloadable media.
      * @param int|null $maxFiles Stop after this many matching files (downloaded, skipped or failed).
      * @param int|null $since Ignore messages older than this Unix timestamp.
+     * @param (Closure(string): (float|false))|null $freeSpace Free bytes on the disk of a directory (default: disk_free_space).
+     * @param int $diskReserve Bytes to keep free on the disk; the run stops before a file that would use them.
      */
     public function __construct(
         private readonly Closure $fetchHistory,
@@ -42,22 +57,28 @@ final class MediaDownloader
         private readonly string $type = '',
         private readonly ?int $maxFiles = null,
         private readonly ?int $since = null,
+        ?Closure $freeSpace = null,
+        private readonly int $diskReserve = self::DISK_RESERVE,
     ) {
+        $this->freeSpace = $freeSpace ?? static fn (string $directory): float|false => @disk_free_space($directory);
     }
 
     /**
-     * @return array{messages: int, downloaded: int, skipped: int, failed: list<array{id: int, name: string, error: string}>, complete: bool}
+     * @return array{messages: int, downloaded: int, skipped: int, failed: list<array{id: int, name: string, error: string}>, complete: bool, diskFull: array{id: int, name: string, needed: int, available: int}|null}
      *         "complete" is false when --limit or --since stopped the run, or failed files are left to retry.
+     *         "diskFull" is set when the run stopped because the disk lacked space; that file and the older ones are left for the next run.
      * @throws Throwable If fetching the history or saving the state fails, or the user interrupts the run (Ctrl+C).
      */
     public function run(MediaDownloadObserver $observer, ?DownloadState $state = null): array
     {
-        $summary = ['messages' => 0, 'downloaded' => 0, 'skipped' => 0, 'failed' => [], 'complete' => true];
+        $summary = ['messages' => 0, 'downloaded' => 0, 'skipped' => 0, 'failed' => [], 'complete' => true, 'diskFull' => null];
         $this->matched = 0;
         $this->sinceReached = false;
+        $this->diskFull = null;
 
         if ($state === null) {
             $summary['complete'] = $this->scanRange(0, null, $observer, $summary, null) === 0;
+            $summary['diskFull'] = $this->diskFull;
             return $summary;
         }
 
@@ -87,6 +108,7 @@ final class MediaDownloader
             $index++;
         }
 
+        $summary['diskFull'] = $this->diskFull;
         return $summary;
     }
 
@@ -101,7 +123,7 @@ final class MediaDownloader
     /**
      * Scan messages with low < id <= high (high null = from the newest), newest first.
      *
-     * @param array{messages: int, downloaded: int, skipped: int, failed: list<array{id: int, name: string, error: string}>, complete: bool} $summary
+     * @param array{messages: int, downloaded: int, skipped: int, failed: list<array{id: int, name: string, error: string}>, complete: bool, diskFull: array{id: int, name: string, needed: int, available: int}|null} $summary
      * @param (Closure(int): void)|null $checkpoint Receives, after each batch, the highest ID still to scan.
      * @return int The highest ID still to scan: equal to $low once the whole range is done.
      */
@@ -143,6 +165,10 @@ final class MediaDownloader
                     if (!$this->downloadMessage($message, $messageId, $observer, $summary)) {
                         $hasFailure = true;
                     }
+                    if ($this->diskFull !== null) {
+                        // Stop right away: every following file would fail the same way.
+                        break;
+                    }
                 }
                 if (!$hasFailure && $messageId > 0) {
                     // Everything from this message up is done; a failure freezes the mark so it is retried.
@@ -165,7 +191,20 @@ final class MediaDownloader
 
     private function stopRequested(): bool
     {
-        return $this->sinceReached || ($this->maxFiles !== null && $this->matched >= $this->maxFiles);
+        return $this->sinceReached
+            || $this->diskFull !== null
+            || ($this->maxFiles !== null && $this->matched >= $this->maxFiles);
+    }
+
+    private static function isDiskFull(Throwable $e): bool
+    {
+        for ($current = $e; $current !== null; $current = $current->getPrevious()) {
+            if (stripos($current->getMessage(), 'No space left on device') !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @param array<string, mixed> $message */
@@ -176,7 +215,7 @@ final class MediaDownloader
 
     /**
      * @param array<string, mixed> $message
-     * @param array{messages: int, downloaded: int, skipped: int, failed: list<array{id: int, name: string, error: string}>, complete: bool} $summary
+     * @param array{messages: int, downloaded: int, skipped: int, failed: list<array{id: int, name: string, error: string}>, complete: bool, diskFull: array{id: int, name: string, needed: int, available: int}|null} $summary
      * @return bool False if the file failed.
      */
     private function downloadMessage(array $message, int $messageId, MediaDownloadObserver $observer, array &$summary): bool
@@ -194,6 +233,14 @@ final class MediaDownloader
                 return true;
             }
 
+            $existing = is_file($path) ? (int) filesize($path) : 0;
+            $needed = max(0, $info['size'] - $existing);
+            $available = ($this->freeSpace)($this->directory);
+            if ($available !== false && $needed + $this->diskReserve > $available) {
+                $this->diskFull = ['id' => $messageId, 'name' => $name, 'needed' => $needed, 'available' => (int) $available];
+                return false;
+            }
+
             $observer->fileStarted($messageId, $name, $info['size']);
             ($this->download)($message, $path, static function (float $percent, float $speed) use ($observer): void {
                 $observer->fileProgress($percent, $speed);
@@ -204,6 +251,13 @@ final class MediaDownloader
         } catch (Throwable $e) {
             if (TerminalQrLogin::wasInterrupted($e)) {
                 throw $e;
+            }
+            if (self::isDiskFull($e)) {
+                // The disk filled up during the download (another program, or a wrong size from Telegram).
+                $available = ($this->freeSpace)($this->directory);
+                $this->diskFull = ['id' => $messageId, 'name' => $name, 'needed' => 0, 'available' => $available === false ? 0 : (int) $available];
+                $observer->fileFailed($messageId, $name, 'No space left on the disk');
+                return false;
             }
             $summary['failed'][] = ['id' => $messageId, 'name' => $name, 'error' => $e->getMessage()];
             $observer->fileFailed($messageId, $name, $e->getMessage());

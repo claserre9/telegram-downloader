@@ -238,6 +238,29 @@ class DownloadMediaCommand extends Command
             ['Already downloaded' => (string) $summary['skipped']],
             ['Failed' => (string) count($summary['failed'])],
         );
+        if ($summary['diskFull'] !== null) {
+            $full = $summary['diskFull'];
+            if ($summary['failed'] !== []) {
+                $io->table(
+                    ['Message', 'File', 'Error'],
+                    array_map(static fn (array $failure): array => ['#' . $failure['id'], $failure['name'], $failure['error']], $summary['failed']),
+                );
+            }
+            $io->error([
+                sprintf('Stopped: not enough disk space for %s (message #%d).', $full['name'], $full['id']),
+                $full['needed'] > 0
+                    ? sprintf(
+                        'It needs %s, %s are free and %s are kept free for the system.',
+                        ConsoleMediaDownloadObserver::formatSize($full['needed']),
+                        ConsoleMediaDownloadObserver::formatSize($full['available']),
+                        ConsoleMediaDownloadObserver::formatSize(MediaDownloader::DISK_RESERVE),
+                    )
+                    : sprintf('The disk filled up during the download (%s free).', ConsoleMediaDownloadObserver::formatSize($full['available'])),
+                'Free some space, or move the files with .telegram-downloader*.json to a bigger disk and pass it with --output, '
+                    . 'then run the command again: it resumes with this file.',
+            ]);
+            return Command::FAILURE;
+        }
         if ($summary['failed'] !== []) {
             $io->table(
                 ['Message', 'File', 'Error'],

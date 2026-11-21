@@ -287,6 +287,60 @@ try {
     $assert(DownloadState::load($corrupt)->knownTop === 0, 'A corrupt state file should be ignored.');
     $assert(DownloadState::pathFor('/d', 'photo') !== DownloadState::pathFor('/d', ''), 'A filtered run must not share the state of a full run.');
 
+    // 8. A full disk stops the run before the file, keeping it and the older ones for the next run.
+    $free = 14;
+    $spaceDownloader = static function (string $dir, array &$downloaded, ?Closure $before = null) use ($describe, &$free): MediaDownloader {
+        return new MediaDownloader(
+            (new FakeHistory(30, static fn (int $id): ?array => $id % 10 === 0 ? ['_' => 'messageMediaPhoto'] : null))->fetch(...),
+            $describe,
+            static function (array $message, string $path) use (&$downloaded, $before): void {
+                if ($before !== null) {
+                    $before($message['id']);
+                }
+                $downloaded[] = $message['id'];
+                file_put_contents($path, str_repeat('x', 10));
+            },
+            $dir,
+            freeSpace: static function () use (&$free): float {
+                return (float) $free;
+            },
+            diskReserve: 5,
+        );
+    };
+    $dir = $newDir('disk-full');
+    $statePath = DownloadState::pathFor($dir, '');
+    $downloaded = [];
+    $observer = new RecordingObserver();
+    $summary = $spaceDownloader($dir, $downloaded)->run($observer, DownloadState::load($statePath));
+    $assert($downloaded === [] && $observer->events === [], 'A file that would leave less than the reserve free should not be started.');
+    $assert($summary['diskFull'] === ['id' => 30, 'name' => 'file_30.bin', 'needed' => 10, 'available' => 14], 'The run should report the file that did not fit.');
+    $assert($summary['failed'] === [] && !$summary['complete'], 'A full disk is not a failed file, but the run is incomplete.');
+    $assert(DownloadState::load($statePath)->pending === [[0, 30]], 'The file that did not fit and the older ones should be kept for the next run.');
+
+    // A partial file only needs the missing part.
+    file_put_contents($dir . '/file_30.bin', 'xxx');
+    $downloaded = [];
+    $summary = $spaceDownloader($dir, $downloaded, static function () use (&$free): void {
+        $free = 0;
+    })->run(new RecordingObserver(), DownloadState::load($statePath));
+    $assert($downloaded === [30] && $summary['diskFull']['id'] === 20, 'The partial file should resume, then the run stop at the next file.');
+    $assert(DownloadState::load($statePath)->pending === [[0, 20]], 'The next run should start at the file that did not fit.');
+
+    // The disk filling up during a download stops the run too, and the file is retried next time.
+    $free = 1000;
+    $downloaded = [];
+    $observer = new RecordingObserver();
+    $summary = $spaceDownloader($dir, $downloaded, static function (int $id): void {
+        throw new RuntimeException("Failed writing to file 'file_$id.bin'", 0, new ErrorException('fwrite(): Write of 1048576 bytes failed with errno=28 No space left on device'));
+    })->run($observer, DownloadState::load($statePath));
+    $assert($downloaded === [] && $summary['diskFull']['id'] === 20 && $summary['failed'] === [], 'A write error for lack of space should stop the run.');
+    $assert(in_array('fail #20 No space left on the disk', $observer->events, true), 'The file should be reported as stopped for lack of space.');
+    $assert(DownloadState::load($statePath)->pending === [[0, 20]], 'A file interrupted by a full disk should be retried next time.');
+
+    $downloaded = [];
+    $summary = $spaceDownloader($dir, $downloaded)->run(new RecordingObserver(), DownloadState::load($statePath));
+    $assert($downloaded === [20, 10] && $summary['diskFull'] === null && $summary['complete'], 'With space again, the run should finish the remaining files.');
+
     // safeFileName keeps Telegram names inside the download directory.
     $assert(MediaDownloader::safeFileName('../../etc/passwd') === '.._.._etc_passwd', 'Path separators should be neutralized.');
     foreach (['', '.', '..', '  '] as $unsafe) {

@@ -126,7 +126,9 @@ To use Telegram Downloader, follow these steps:
 Progress is saved in the download directory (`.telegram-downloader*.json`, one file per `--type`).
 The next run only scans messages posted since, resumes an interrupted run where it stopped, and
 retries files that failed. Files already complete on disk are skipped and partial files resume, so
-it is safe to stop the command with Ctrl+C. After a run limited by `--limit` or `--since`, a run
+it is safe to stop the command with Ctrl+C. Before each file, the command checks the free disk
+space: when the file would leave less than 1 GB free, or the disk fills up during the download, it
+stops and the next run resumes with that file. After a run limited by `--limit` or `--since`, a run
 without them continues with the older messages.
 
 #### Note
