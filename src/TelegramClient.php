@@ -7,7 +7,9 @@ use danog\MadelineProto\API;
 use danog\MadelineProto\Exception;
 use danog\MadelineProto\Ipc\Client;
 use danog\MadelineProto\Settings;
+use danog\MadelineProto\Logger;
 use danog\MadelineProto\Settings\AppInfo;
+use danog\MadelineProto\Settings\Logger as LoggerSettings;
 use danog\MadelineProto\SettingsAbstract;
 use danog\MadelineProto\TL\Types\LoginQrCode;
 use danog\MadelineProto\Tools;
@@ -63,6 +65,23 @@ class TelegramClient
             ->setApiId($this->telegramApiId)
             ->setApiHash($this->telegramApiHash)
         );
+        // MadelineProto writes its own diagnostics (IPC connections, harmless shutdown traces) to the
+        // terminal by default; keep them in a log file next to the session so only the app's output shows.
+        $this->settings->setLogger((new LoggerSettings())
+            ->setType(Logger::LOGGER_FILE)
+            ->setExtra($this->logPath())
+            ->setLevel(Logger::LEVEL_WARNING)
+        );
+    }
+
+    private function logPath(): string
+    {
+        $directory = dirname($this->sessionPath);
+        if (!str_starts_with($directory, '/')) {
+            $directory = getcwd() . '/' . $directory;
+        }
+
+        return $directory . '/MadelineProto.log';
     }
 
     /**

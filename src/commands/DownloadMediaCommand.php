@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace claserre9\commands;
 
+use Amp\DeferredCancellation;
 use Closure;
 use claserre9\DownloadState;
 use claserre9\MediaDownloader;
@@ -21,6 +22,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Filesystem\Path;
 use Throwable;
+
+use function Amp\delay;
 
 #[AsCommand(
     name: 'telegram:download:media',
@@ -59,6 +62,20 @@ class DownloadMediaCommand extends Command
      * (relative to the project root) when set, e.g. to keep it in a Docker volume. Never depends on the
      * working directory.
      */
+    /**
+     * Stops the worker's download of the current file before this command exits.
+     */
+    private static function cancelInWorker(DeferredCancellation $cancellation): void
+    {
+        $cancellation->cancel();
+        try {
+            // The worker learns about the cancellation over IPC: give the message time to be sent.
+            delay(0.5);
+        } catch (Throwable) {
+            // A second Ctrl+C: exit right away.
+        }
+    }
+
     public static function sessionPath(): string
     {
         $configured = $_ENV['TELEGRAM_CLI_SESSION'] ?? getenv('TELEGRAM_CLI_SESSION');
@@ -174,9 +191,24 @@ class DownloadMediaCommand extends Command
                 return ['name' => $info['name'], 'ext' => $info['ext'], 'size' => $info['size']];
             },
             static function (array $message, string $path, Closure $progress) use ($madeline): void {
-                $madeline->downloadToFile($message, $path, static function (float $percent, float $speed) use ($progress): void {
-                    $progress($percent, $speed);
-                });
+                // The download runs in MadelineProto's worker process, which outlives this command: without an
+                // explicit cancellation, Ctrl+C would leave it downloading, and the next run would wait for it.
+                $cancellation = new DeferredCancellation();
+                try {
+                    $madeline->downloadToFile(
+                        $message,
+                        $path,
+                        static function (float $percent, float $speed) use ($progress): void {
+                            $progress($percent, $speed);
+                        },
+                        $cancellation->getCancellation(),
+                    );
+                } catch (Throwable $e) {
+                    if (TerminalQrLogin::wasInterrupted($e)) {
+                        self::cancelInWorker($cancellation);
+                    }
+                    throw $e;
+                }
             },
             $options->directory,
             $options->type,
