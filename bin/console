@@ -8,6 +8,7 @@ error_reporting(E_ALL);
 require __DIR__ . '/../vendor/autoload.php';
 
 use claserre9\commands\DownloadMediaCommand;
+use claserre9\commands\ExportMessagesCommand;
 use Dotenv\Dotenv;
 use Symfony\Component\Console\Application;
 
@@ -17,6 +18,7 @@ $dotenv->safeLoad();
 
 $application = new Application('Telegram Downloader', '1.0.0');
 $application->add(new DownloadMediaCommand());
+$application->add(new ExportMessagesCommand());
 try {
     $application->run();
 } catch (Exception $e) {

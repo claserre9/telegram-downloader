@@ -19,11 +19,14 @@ final class DownloadState
     /**
      * @param int $knownTop Newest message ID already queued for scanning.
      * @param list<array{int, int}> $pending Ranges still to scan, in order.
+     * @param int|null $outputBytes Message export only: size of messages.jsonl when the state was saved. Lines past it
+     *        were written after the last save, so their messages are still pending and the lines are dropped on resume.
      */
     private function __construct(
         private readonly string $path,
         public int $knownTop,
         public array $pending,
+        public ?int $outputBytes = null,
     ) {
     }
 
@@ -34,6 +37,20 @@ final class DownloadState
     {
         return rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR
             . '.telegram-downloader' . ($filter === '' ? '' : '-' . $filter) . '.json';
+    }
+
+    /**
+     * State file of the message export inside an export directory.
+     */
+    public static function exportPathFor(string $directory): string
+    {
+        return rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '.telegram-exporter.json';
+    }
+
+    /** Whether nothing was exported or queued yet. */
+    public function isNew(): bool
+    {
+        return $this->knownTop === 0 && $this->pending === [];
     }
 
     /**
@@ -53,7 +70,9 @@ final class DownloadState
             }
         }
 
-        return new self($path, max(0, $data['known_top']), $pending);
+        $outputBytes = is_int($data['output_bytes'] ?? null) && $data['output_bytes'] >= 0 ? $data['output_bytes'] : null;
+
+        return new self($path, max(0, $data['known_top']), $pending, $outputBytes);
     }
 
     /**
@@ -72,7 +91,11 @@ final class DownloadState
      */
     public function save(): void
     {
-        $json = json_encode(['version' => self::VERSION, 'known_top' => $this->knownTop, 'pending' => $this->pending], JSON_PRETTY_PRINT);
+        $data = ['version' => self::VERSION, 'known_top' => $this->knownTop, 'pending' => $this->pending];
+        if ($this->outputBytes !== null) {
+            $data['output_bytes'] = $this->outputBytes;
+        }
+        $json = json_encode($data, JSON_PRETTY_PRINT);
         $temporary = $this->path . '.tmp';
         if ($json === false || file_put_contents($temporary, $json . "\n") === false || !rename($temporary, $this->path)) {
             throw new RuntimeException('Cannot save the download progress to ' . $this->path);
