@@ -112,6 +112,22 @@ final class MediaDownloader
         return $summary;
     }
 
+    /**
+     * Download the media of one message, as run() does for every matching message (used by the message export).
+     *
+     * @param array<string, mixed> $message
+     * @return array{downloaded: int, skipped: int, failed: list<array{id: int, name: string, error: string}>, diskFull: array{id: int, name: string, needed: int, available: int}|null}
+     * @throws Throwable If the user interrupts the download (Ctrl+C).
+     */
+    public function downloadOne(array $message, MediaDownloadObserver $observer): array
+    {
+        $summary = ['messages' => 1, 'downloaded' => 0, 'skipped' => 0, 'failed' => [], 'complete' => true, 'diskFull' => null];
+        $this->diskFull = null;
+        $this->downloadMessage($message, self::idOf($message), $observer, $summary);
+
+        return ['downloaded' => $summary['downloaded'], 'skipped' => $summary['skipped'], 'failed' => $summary['failed'], 'diskFull' => $this->diskFull];
+    }
+
     /** Make a Telegram-supplied file name safe to use inside the download directory. */
     public static function safeFileName(string $name): string
     {

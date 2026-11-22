@@ -14,6 +14,7 @@ who need access to these media for various legitimate purposes.
 - Download media from any Telegram channel (public or private).
 - User-friendly: Easy to set up and use.
 - Customizable download options, including video quality and save location.
+- Export the messages of a chat to JSON Lines, with links to the downloaded media.
 
 ## Prerequisites
 Before you begin, ensure you have met the following requirements:
@@ -130,6 +131,66 @@ it is safe to stop the command with Ctrl+C. Before each file, the command checks
 space: when the file would leave less than 1 GB free, or the disk fills up during the download, it
 stops and the next run resumes with that file. After a run limited by `--limit` or `--since`, a run
 without them continues with the older messages.
+
+### Export messages
+
+To also keep the text of a chat, export its messages to [JSON Lines](https://jsonlines.org/):
+
+```
+php bin/console tdx @my_channel
+```
+
+(`tdx` is short for `telegram:export:messages`; with Docker, run
+`docker compose run --rm telegram-downloader php bin/console tdx @my_channel`.) Every message is written to
+`downloads/<chat>/messages.jsonl`, one JSON object per line, next to the files downloaded by `tdm`. This also works
+for channels and groups that restrict saving content.
+
+| Option | Effect |
+|---|---|
+| `-o, --output=DIR` | Export directory (relative to the current directory) |
+| `-l, --limit=N` | Stop after N messages, newest first |
+| `-s, --since=DATE` | Only messages from this date, e.g. `2024-01-31` or `"7 days ago"` |
+| `--media` | Also download the photos and files of the exported messages |
+| `-f, --format=json` | Also write every message to `messages.json`, one array sorted from the oldest message |
+| `--rescan` | Export the whole history again, replacing `messages.jsonl` |
+
+Like downloads, exports are incremental: the next run only adds messages posted since, and an interrupted run
+resumes where it stopped (progress is saved in `.telegram-exporter.json`). Lines are therefore in export order, not
+chat order: sort them by `id`, or use `--format=json`. A message is exported as it was at the time: later edits or
+deletions are only picked up with `--rescan`.
+
+Each line looks like this (shown on several lines here):
+
+```json
+{"id": 812, "chat": {"id": -1001234567890, "username": "my_channel", "title": "My Channel"},
+ "link": "https://t.me/my_channel/812", "date": "2026-11-20T14:03:11Z", "edited": "2026-11-20T14:05:00Z",
+ "from": {"id": 123456789, "name": "Jean Pierre", "username": "jean"},
+ "text": "Yesterday's match", "entities": [{"type": "bold", "offset": 0, "length": 9}],
+ "reply_to": {"id": 805}, "grouped_id": "13865874093846734", "views": 2170,
+ "media": {"type": "video", "file": "match_6019241771643444431.mp4", "name": "match.mp4", "mime": "video/mp4",
+           "size": 48213504, "duration": 94, "width": 1280, "height": 720}}
+```
+
+| Field | Content |
+|---|---|
+| `id`, `chat` | Message ID, and the chat's Bot API ID (`-100…` for channels and supergroups), username and title. |
+| `link` | `t.me` link to the message: works for anyone in public chats, for members in private ones (`t.me/c/…`). Absent in private conversations and basic groups. |
+| `date`, `edited` | ISO 8601 dates in UTC. |
+| `from`, `author` | Sender (`id`, `name`, `username`); the channel itself for channel posts, with the post signature in `author`. |
+| `text`, `entities` | Text or caption, and its formatting: `bold`, `italic`, `code`, `pre`, `url`, `text_url` (with `url`), `mention`, `mention_name` (with `user_id`)… Offsets and lengths count UTF-16 code units, as in Telegram's API. |
+| `reply_to` | Replied message `id`, thread `top_id`, `quote`, and `chat_id` if it is in another chat. |
+| `forwarded_from` | Original sender (`id`, `name`, `username`), `message_id` for channel posts, and original `date`. |
+| `grouped_id` | Same value for the messages of one album. A string, as it can exceed JavaScript's integers. |
+| `service` | For service messages (member joined, title changed…): `type`, e.g. `chat_add_user`, and its details. |
+| `media` | `type`: `photo`, `video`, `video_note`, `gif`, `voice`, `audio`, `sticker`, `document`, `webpage`, `poll`, `location`, `venue`, `contact`, `dice`… |
+| `media.file` | Photos and files only: name of the file in the export directory, the same as `tdm` uses. It exists once downloaded with `--media` or `tdm`. |
+
+Other media keep their data instead of a file: `url` and `title` of link previews, `question`, `answers` and votes of
+polls, `latitude` and `longitude` of locations. Optional fields are left out when empty. There are no direct
+download links: Telegram files are only reachable with a logged-in session, so use `link`, or `chat` and `id`.
+
+An export of a group contains the messages, names and usernames of its other members: keep it private and respect
+their privacy.
 
 #### Note
 

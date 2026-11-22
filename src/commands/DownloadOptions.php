@@ -25,6 +25,8 @@ final class DownloadOptions
     }
 
     /**
+     * Also used by the message export, which has no --type: $command and $limitUnit only change error messages.
+     *
      * @throws InvalidArgumentException With a message for the user if an option is invalid.
      */
     public static function parse(
@@ -37,10 +39,12 @@ final class DownloadOptions
         bool $rescan,
         string $projectRoot,
         string $workingDirectory,
+        string $command = 'tdm',
+        string $limitUnit = 'files',
     ): self {
         $chat = is_string($chat) && trim($chat) !== '' ? trim($chat) : (is_string($envChat) ? trim($envChat) : '');
         if ($chat === '') {
-            throw new InvalidArgumentException('Give the chat to download from, e.g. "tdm @my_channel", or set TELEGRAM_CHANNEL.');
+            throw new InvalidArgumentException("Give the chat, e.g. \"$command @my_channel\", or set TELEGRAM_CHANNEL.");
         }
 
         $type = is_string($type) ? strtolower(trim($type)) : '';
@@ -55,7 +59,7 @@ final class DownloadOptions
         $maxFiles = null;
         if ($limit !== null) {
             if (!is_string($limit) || preg_match('/\A[1-9][0-9]{0,8}\z/', trim($limit)) !== 1) {
-                throw new InvalidArgumentException('--limit must be a positive number of files.');
+                throw new InvalidArgumentException("--limit must be a positive number of $limitUnit.");
             }
             $maxFiles = (int) trim($limit);
         }

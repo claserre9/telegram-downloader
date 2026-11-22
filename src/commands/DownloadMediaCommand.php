@@ -10,6 +10,7 @@ use claserre9\DownloadState;
 use claserre9\MediaDownloader;
 use claserre9\TelegramClient;
 use claserre9\TerminalQrLogin;
+use danog\MadelineProto\API;
 use InvalidArgumentException;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -58,11 +59,6 @@ class DownloadMediaCommand extends Command
     }
 
     /**
-     * The command's MadelineProto session: session.madeline at the project root, or TELEGRAM_CLI_SESSION
-     * (relative to the project root) when set, e.g. to keep it in a Docker volume. Never depends on the
-     * working directory.
-     */
-    /**
      * Stops the worker's download of the current file before this command exits.
      */
     private static function cancelInWorker(DeferredCancellation $cancellation): void
@@ -76,6 +72,11 @@ class DownloadMediaCommand extends Command
         }
     }
 
+    /**
+     * The command's MadelineProto session: session.madeline at the project root, or TELEGRAM_CLI_SESSION
+     * (relative to the project root) when set, e.g. to keep it in a Docker volume. Never depends on the
+     * working directory.
+     */
     public static function sessionPath(): string
     {
         $configured = $_ENV['TELEGRAM_CLI_SESSION'] ?? getenv('TELEGRAM_CLI_SESSION');
@@ -127,31 +128,8 @@ class DownloadMediaCommand extends Command
             return Command::INVALID;
         }
 
-        // Absolute path, so the same session (and login) is reused whatever directory the command runs from.
-        $client = new TelegramClient(
-            (int) $_ENV['TELEGRAM_API_ID'],
-            (string) $_ENV['TELEGRAM_API_HASH'],
-            self::sessionPath()
-        );
-        try {
-            $client->start(
-                static function (string $message) use ($output): void {
-                    $output->writeln($message);
-                },
-                static fn (string $prompt): string => (string) $io->askHidden($prompt),
-            );
-        } catch (RuntimeException $e) {
-            if (TerminalQrLogin::wasInterrupted($e)) {
-                $io->warning('Login cancelled.');
-                return Command::FAILURE;
-            }
-            $io->error($e->getMessage());
-            return Command::FAILURE;
-        }
-
-        $madeline = $client->getMadeline();
-        if (!$madeline) {
-            $io->error('Failed to connect to telegram');
+        $madeline = self::connect($io, $output);
+        if ($madeline === null) {
             return Command::FAILURE;
         }
 
@@ -186,30 +164,8 @@ class DownloadMediaCommand extends Command
                 );
                 return $history['messages'];
             },
-            static function (array $message) use ($madeline): array {
-                $info = $madeline->getDownloadInfo($message);
-                return ['name' => $info['name'], 'ext' => $info['ext'], 'size' => $info['size']];
-            },
-            static function (array $message, string $path, Closure $progress) use ($madeline): void {
-                // The download runs in MadelineProto's worker process, which outlives this command: without an
-                // explicit cancellation, Ctrl+C would leave it downloading, and the next run would wait for it.
-                $cancellation = new DeferredCancellation();
-                try {
-                    $madeline->downloadToFile(
-                        $message,
-                        $path,
-                        static function (float $percent, float $speed) use ($progress): void {
-                            $progress($percent, $speed);
-                        },
-                        $cancellation->getCancellation(),
-                    );
-                } catch (Throwable $e) {
-                    if (TerminalQrLogin::wasInterrupted($e)) {
-                        self::cancelInWorker($cancellation);
-                    }
-                    throw $e;
-                }
-            },
+            self::describer($madeline),
+            self::fileDownloader($madeline),
             $options->directory,
             $options->type,
             $options->limit,
@@ -280,7 +236,86 @@ class DownloadMediaCommand extends Command
         return Command::SUCCESS;
     }
 
-    private static function projectRoot(): string
+    /**
+     * Log in with the command's session (QR code on the first run) and return the API, or null after printing why
+     * it failed.
+     */
+    public static function connect(SymfonyStyle $io, OutputInterface $output): ?API
+    {
+        // Absolute path, so the same session (and login) is reused whatever directory the command runs from.
+        $client = new TelegramClient(
+            (int) $_ENV['TELEGRAM_API_ID'],
+            (string) $_ENV['TELEGRAM_API_HASH'],
+            self::sessionPath()
+        );
+        try {
+            $client->start(
+                static function (string $message) use ($output): void {
+                    $output->writeln($message);
+                },
+                static fn (string $prompt): string => (string) $io->askHidden($prompt),
+            );
+        } catch (RuntimeException $e) {
+            if (TerminalQrLogin::wasInterrupted($e)) {
+                $io->warning('Login cancelled.');
+                return null;
+            }
+            $io->error($e->getMessage());
+            return null;
+        }
+
+        $madeline = $client->getMadeline();
+        if (!$madeline) {
+            $io->error('Failed to connect to telegram');
+            return null;
+        }
+
+        return $madeline;
+    }
+
+    /**
+     * File name, extension and size of a message's media, as MediaDownloader expects them.
+     *
+     * @return Closure(array<string, mixed>): array{name: string, ext: string, size: int}
+     */
+    public static function describer(API $madeline): Closure
+    {
+        return static function (array $message) use ($madeline): array {
+            $info = $madeline->getDownloadInfo($message);
+            return ['name' => $info['name'], 'ext' => $info['ext'], 'size' => $info['size']];
+        };
+    }
+
+    /**
+     * Downloads a message's media to a path in MadelineProto's worker, reporting progress.
+     *
+     * @return Closure(array<string, mixed>, string, Closure(float, float): void): void
+     */
+    public static function fileDownloader(API $madeline): Closure
+    {
+        return static function (array $message, string $path, Closure $progress) use ($madeline): void {
+            // The download runs in MadelineProto's worker process, which outlives this command: without an
+            // explicit cancellation, Ctrl+C would leave it downloading, and the next run would wait for it.
+            $cancellation = new DeferredCancellation();
+            try {
+                $madeline->downloadToFile(
+                    $message,
+                    $path,
+                    static function (float $percent, float $speed) use ($progress): void {
+                        $progress($percent, $speed);
+                    },
+                    $cancellation->getCancellation(),
+                );
+            } catch (Throwable $e) {
+                if (TerminalQrLogin::wasInterrupted($e)) {
+                    self::cancelInWorker($cancellation);
+                }
+                throw $e;
+            }
+        };
+    }
+
+    public static function projectRoot(): string
     {
         return dirname(__DIR__, 2);
     }
